@@ -1,0 +1,74 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: telebot-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - telebot-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: telebot-redis
+    restart: always
+    command: redis-server --appendonly yes --appendfsync everysec --maxmemory 512mb --maxmemory-policy noeviction
+    volumes:
+      - redis_data:/data
+    networks:
+      - telebot-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+
+  nest:
+    build:
+      context: .
+      dockerfile: telegram-user-service-nest/Dockerfile
+    container_name: telebot-nest
+    restart: always
+    stop_grace_period: 30s
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    env_file: .env
+    ports:
+      - "3001:3001"
+    networks:
+      - telebot-network
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 3001 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s # Dá tempo para o Prisma rodar migrações
+  next:
+    build:
+      context: .
+      dockerfile: Dockerfile.next
+    container_name: telebot-next
+    restart: always
+    depends_on:
+      nest: { condition: service_healthy }
+    env_file: .env
+    ports:
+      - "3000:3000"
+    networks:
+      - telebot-network
+
+networks:
+  telebot-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
