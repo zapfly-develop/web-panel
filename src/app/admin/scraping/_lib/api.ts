@@ -6,8 +6,11 @@ import {
     ScrapingProgress,
     ScrapingJob,
 } from "./types";
+import { getRequiredPublicNestApiBaseUrl } from "@/lib/nest-api";
 
-const API_BASE_URL = process.env.API_URL || "http://localhost:3001";
+function getScrapingApiBaseUrl() {
+    return getRequiredPublicNestApiBaseUrl();
+}
 
 export class ScrapingAPI {
     /**
@@ -16,13 +19,16 @@ export class ScrapingAPI {
     static async startScraping(
         data: StartScrapingRequest,
     ): Promise<StartScrapingResponse> {
-        const response = await fetch(`${API_BASE_URL}/telegram/scraper/start`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
+        const response = await fetch(
+            `${getScrapingApiBaseUrl()}/telegram/scraper/start`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(data),
             },
-            body: JSON.stringify(data),
-        });
+        );
 
         if (!response.ok) {
             const error = await response.json();
@@ -37,7 +43,7 @@ export class ScrapingAPI {
      */
     static async getProgress(jobId: string): Promise<ScrapingProgress> {
         const response = await fetch(
-            `${API_BASE_URL}/telegram/scraper/progress/${jobId}`,
+            `${getScrapingApiBaseUrl()}/telegram/scraper/progress/${jobId}`,
         );
 
         if (!response.ok) {
@@ -52,7 +58,7 @@ export class ScrapingAPI {
      * Lista todos os jobs de scraping
      */
     static async getJobs(botId?: string): Promise<ScrapingJob[]> {
-        const url = new URL(`${API_BASE_URL}/telegram/scraper/jobs`);
+        const url = new URL(`${getScrapingApiBaseUrl()}/telegram/scraper/jobs`);
         if (botId) {
             url.searchParams.append("botId", botId);
         }
@@ -74,7 +80,7 @@ export class ScrapingAPI {
         jobId: string,
     ): Promise<{ retried: number; message: string }> {
         const response = await fetch(
-            `${API_BASE_URL}/telegram/scraper/retry/${jobId}`,
+            `${getScrapingApiBaseUrl()}/telegram/scraper/retry/${jobId}`,
             {
                 method: "POST",
             },

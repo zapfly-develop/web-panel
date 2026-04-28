@@ -10,6 +10,7 @@ import {
     LayoutDashboard,
     MessageCircle,
     MessageSquare,
+    Route,
     ShoppingBag,
     Users,
 } from "lucide-react";
@@ -95,6 +96,12 @@ export default async function DashboardLayout({
                         <Link href="/dashboard/orders">
                             <Bike className="w-4 h-4 mr-2" />
                             Pedidos
+                        </Link>
+                    </Button>
+                    <Button asChild variant="ghost" size="sm">
+                        <Link href="/dashboard/delivery">
+                            <Route className="w-4 h-4 mr-2" />
+                            Entregas
                         </Link>
                     </Button>
                 </div>

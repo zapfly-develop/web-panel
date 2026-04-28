@@ -9,19 +9,13 @@
 // }
 
 import { NextResponse } from "next/server";
+import { getNestApiBaseUrl } from "@/lib/nest-api";
 
 export const runtime = "edge";
 
 export async function GET() {
-    const nestUrl = process.env.NEXT_PUBLIC_NEST_API_URL;
+    const nestUrl = getNestApiBaseUrl();
     const secret = process.env.CRON_SECRET;
-
-    if (!nestUrl) {
-        return NextResponse.json(
-            { error: "NEST_API_URL não configurado." },
-            { status: 500 },
-        );
-    }
 
     const res = await fetch(`${nestUrl}/schedules/process`, {
         method: "POST",

@@ -136,8 +136,13 @@ Dentro do Docker os containers se comunicam pelo nome do serviço:
 - Next.js → NestJS: `http://nest:3001` (variável `NEST_API_URL`)
 - Ambos → Postgres: `postgresql://postgres:postgres@postgres:5432/teletram-bot`
 
-A variável `NEXT_PUBLIC_NEST_API_URL=http://localhost:3001` é usada pelo
-browser do cliente (fora do Docker), por isso mantém `localhost`.
+O browser usa `NEXT_PUBLIC_NEST_API_URL` para HTTP/Socket.IO no Nest. Em
+desenvolvimento local no mesmo computador, use `http://localhost:3001`. Para
+testar em celular ou outro dispositivo da rede, use o IP da máquina, por
+exemplo `http://192.168.0.50:3001`.
+
+No build Docker do Next, `NEXT_PUBLIC_NEST_API_URL` é passado como build arg
+porque variáveis `NEXT_PUBLIC_*` são embutidas no bundle do browser.
 
 ## Migrations
 

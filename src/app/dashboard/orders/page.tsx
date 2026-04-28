@@ -1,18 +1,20 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertCircle, ArrowRight, Bike, RadioTower, Store } from "lucide-react";
-import OrderCardsDashboard from "@/components/dashboard/order-cards-dashboard";
+import { AlertCircle, ArrowRight } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
-import { getDeliveryOrderDashboard } from "@/lib/orders-dashboard";
-import type { DeliveryOrderCard } from "@/lib/orders-dashboard.types";
+    listAvailableDeliveryRiders,
+    listStoreDeliveries,
+} from "@/features/delivery/services/delivery-api";
+import type {
+    DeliveryRider,
+    StoreDelivery,
+} from "@/features/delivery/services/delivery-types";
+import { StoreOrdersWorkspace } from "@/features/orders/pages/store-orders-workspace";
+import { listStoreOrders } from "@/features/orders/services/orders-api";
+import type { StoreOrder } from "@/features/orders/services/order-types";
 import { requireSessionUser } from "@/lib/server-session";
 
 export const runtime = "nodejs";
@@ -24,11 +26,21 @@ export default async function DashboardOrdersPage() {
         redirect("/admin/dashboard");
     }
 
-    let orders: DeliveryOrderCard[] = [];
+    let orders: StoreOrder[] = [];
+    let deliveries: StoreDelivery[] = [];
+    let availableRiders: DeliveryRider[] = [];
     let loadError: string | null = null;
 
     try {
-        orders = await getDeliveryOrderDashboard(user.id);
+        const [dashboardOrders, deliveryItems, riders] = await Promise.all([
+            listStoreOrders(user.id),
+            listStoreDeliveries(user.id).catch(() => []),
+            listAvailableDeliveryRiders(user.id).catch(() => []),
+        ]);
+
+        orders = dashboardOrders;
+        deliveries = deliveryItems;
+        availableRiders = riders;
     } catch (error) {
         loadError =
             error instanceof Error
@@ -37,7 +49,7 @@ export default async function DashboardOrdersPage() {
     }
 
     return (
-        <div className="mx-auto max-w-7xl space-y-8">
+        <div className="mx-auto max-w-7xl space-y-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div className="space-y-3">
                     <Badge
@@ -51,9 +63,8 @@ export default async function DashboardOrdersPage() {
                             Pedidos do seu delivery
                         </h1>
                         <p className="max-w-2xl text-slate-500">
-                            Os pedidos confirmados no WhatsApp aparecem aqui em
-                            cards, com atualizacao ao vivo e atalho para avisar
-                            o cliente quando o motoboy sair.
+                            Acompanhe preparo, rota, SLA, riders e pedidos
+                            confirmados no WhatsApp em uma tela operacional.
                         </p>
                     </div>
                 </div>
@@ -85,55 +96,12 @@ export default async function DashboardOrdersPage() {
                 </Alert>
             )}
 
-            <div className="grid gap-4 lg:grid-cols-3">
-                <Card className="border-none bg-white shadow-sm">
-                    <CardHeader className="pb-3">
-                        <div className="flex items-center gap-2">
-                            <Store className="h-5 w-5 text-primary" />
-                            <CardTitle className="text-lg">
-                                Operacao da loja
-                            </CardTitle>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="text-sm text-slate-500">
-                        Cada card traz itens, endereco e valor total para o seu
-                        time despachar com agilidade.
-                    </CardContent>
-                </Card>
-
-                <Card className="border-none bg-white shadow-sm">
-                    <CardHeader className="pb-3">
-                        <div className="flex items-center gap-2">
-                            <RadioTower className="h-5 w-5 text-primary" />
-                            <CardTitle className="text-lg">
-                                Atualizacao ao vivo
-                            </CardTitle>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="text-sm text-slate-500">
-                        O painel escuta o Socket.io do Nest e mostra os seus
-                        pedidos finalizados sem recarregar a pagina.
-                    </CardContent>
-                </Card>
-
-                <Card className="border-none bg-white shadow-sm">
-                    <CardHeader className="pb-3">
-                        <div className="flex items-center gap-2">
-                            <Bike className="h-5 w-5 text-primary" />
-                            <CardTitle className="text-lg">
-                                Saida para entrega
-                            </CardTitle>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="text-sm text-slate-500">
-                        Um clique muda o status e dispara a mensagem no
-                        WhatsApp: &quot;Seu pedido saiu para entrega com o
-                        motoboy!&quot;.
-                    </CardContent>
-                </Card>
-            </div>
-
-            <OrderCardsDashboard initialOrders={orders} userId={user.id} />
+            <StoreOrdersWorkspace
+                initialOrders={orders}
+                initialDeliveries={deliveries}
+                initialAvailableRiders={availableRiders}
+                userId={user.id}
+            />
         </div>
     );
 }

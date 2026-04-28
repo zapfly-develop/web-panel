@@ -1,11 +1,31 @@
 import axios from "axios";
 import crypto from "crypto";
 
-const SYNCPAY_API_URL = "https://api.syncpayments.com.br"; // Use correct base URL from docs if available, assuming .com.br or provided
+const SYNCPAY_API_URL =
+    process.env.SYNCPAY_API_URL || "https://api.syncpayments.com.br";
 const CLIENT_ID = process.env.SYNCPAY_CLIENT_ID;
 const CLIENT_SECRET = process.env.SYNCPAY_CLIENT_SECRET;
 const STATIC_KEY =
     process.env.SYNCPAY_STATIC_KEY || "01K1259MAXE0TNRXV2C2WQN2MV";
+
+type SyncPayClient = {
+    name: string;
+    cpf: string;
+    email: string;
+    phone: string;
+};
+
+type AxiosErrorLike = {
+    response?: {
+        data?: unknown;
+    };
+    message?: string;
+};
+
+function getAxiosErrorDetail(error: unknown): unknown {
+    const axiosError = error as AxiosErrorLike;
+    return axiosError.response?.data || axiosError.message || error;
+}
 
 let cachedToken: string | null = null;
 let tokenExpiry: number = 0;
@@ -63,10 +83,10 @@ export class SyncPayService {
             );
 
             return response.data; // { message, pix_code, identifier }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error(
                 "SyncPay Cash-In Error:",
-                error.response?.data || error.message,
+                getAxiosErrorDetail(error),
             );
             throw error;
         }
@@ -77,7 +97,7 @@ export class SyncPayService {
         amountCents: number;
         referenceId: string;
         productTitle: string;
-        client?: any;
+        client?: SyncPayClient;
     }) {
         // This now calls the real PIX generation
         const webhookUrl = `${process.env.APP_BASE_URL}/api/syncpay/webhook`;

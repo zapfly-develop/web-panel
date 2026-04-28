@@ -1,6 +1,5 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -59,18 +58,41 @@ model User {
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
 
-  bots              BotAccount[]
-  products          Product[]
-  templates         MessageTemplate[]
-  subscription      Subscription?
-  transactions      Transaction[]
-  whatsappInstances WhatsappInstance[]
-  whatsappCustomers WhatsappCustomer[]
-  orders            Order[]            @relation("UserOrders")
-  whatsappHandovers WhatsappHandover[]
-  operatingHours    OperatingHour[]    @relation("SubscriberOperatingHours")
-  tags              Tag[]              @relation("SubscriberTags")
-  productTags       ProductTags[]      @relation("SubscriberProductTags")
+  bots               BotAccount[]
+  products           Product[]
+  templates          MessageTemplate[]
+  subscription       Subscription?
+  transactions       Transaction[]
+  whatsappInstances  WhatsappInstance[]
+  whatsappCustomers  WhatsappCustomer[]
+  orders             Order[]             @relation("UserOrders")
+  whatsappHandovers  WhatsappHandover[]
+  operatingHours     OperatingHour[]     @relation("SubscriberOperatingHours")
+  tags               Tag[]               @relation("SubscriberTags")
+  productTags        ProductTags[]       @relation("SubscriberProductTags")
+  riderProfile       Rider?              @relation("RiderUser")
+  storeRiders        Rider[]             @relation("StoreOwnedRiders")
+  storeDeliveries    Delivery[]          @relation("StoreDeliveries")
+  deliveryPayouts    DeliveryPayout[]    @relation("StoreDeliveryPayouts")
+  pushSubscriptions  PushSubscription[]
+  wallet             Wallet?
+  walletTransactions WalletTransaction[]
+}
+
+model PushSubscription {
+  id             String    @id @default(cuid())
+  userId         String
+  endpoint       String    @unique @db.Text
+  p256dh         String    @db.Text
+  auth           String    @db.Text
+  expirationTime DateTime?
+  userAgent      String?   @db.Text
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
 }
 
 model OperatingHour {
@@ -187,6 +209,72 @@ model Transaction {
 
   @@index([status, referenceDate])
   @@index([userId, createdAt])
+}
+
+enum WalletTransactionType {
+  CREDIT
+  DEBIT
+}
+
+enum WalletTransactionCategory {
+  DELIVERY_PAYOUT
+  WITHDRAWAL
+  REFUND
+}
+
+enum WalletTransactionStatus {
+  COMPLETED
+  PENDING
+  FAILED
+}
+
+model Wallet {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  balanceCents       Int      @default(0)
+  frozenBalanceCents Int      @default(0)
+  currency           String   @default("BRL")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+
+  @@index([userId])
+}
+
+model WalletTransaction {
+  id                       String                    @id @default(cuid())
+  walletId                 String
+  userId                   String
+  type                     WalletTransactionType
+  category                 WalletTransactionCategory
+  status                   WalletTransactionStatus   @default(PENDING)
+  amountCents              Int
+  currency                 String                    @default("BRL")
+  balanceBeforeCents       Int
+  balanceAfterCents        Int
+  frozenBalanceBeforeCents Int                       @default(0)
+  frozenBalanceAfterCents  Int                       @default(0)
+  sourceModule             String?
+  sourceEvent              String?
+  sourceReferenceId        String?
+  idempotencyKey           String?                   @unique
+  description              String?                   @db.Text
+  metadata                 Json?
+  processedAt              DateTime?
+  failedAt                 DateTime?
+  failureReason            String?                   @db.Text
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, createdAt])
+  @@index([userId, category, createdAt])
+  @@index([status, createdAt])
+  @@index([sourceModule, sourceReferenceId])
 }
 
 enum BusinessProfile {
@@ -457,6 +545,61 @@ enum OrderStatus {
   DELIVERED
 }
 
+enum RiderStatus {
+  PENDING_REVIEW
+  ACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+enum RiderAvailabilityStatus {
+  OFFLINE
+  AVAILABLE
+  BUSY
+}
+
+enum RiderVehicleType {
+  MOTORCYCLE
+  BICYCLE
+  CAR
+  OTHER
+}
+
+enum DeliveryStatus {
+  WAITING_RIDER
+  PENDING_ASSIGNMENT
+  ASSIGNED
+  ACCEPTED
+  PICKED_UP
+  IN_TRANSIT
+  DELIVERED
+  CANCELED
+}
+
+enum DeliveryPaymentHandledBy {
+  RIDER
+  STORE_MACHINE
+}
+
+enum DeliveryAssignmentType {
+  MARKETPLACE
+  STORE_OWNED
+  MANUAL
+}
+
+enum DeliveryPayoutStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  CANCELED
+}
+
+enum DeliveryPayoutSettlementType {
+  STORE_DEBIT
+  RIDER_RETAINED
+}
+
 model Order {
   id                 String         @id @default(cuid())
   ownerUserId        String?
@@ -480,9 +623,120 @@ model Order {
   ownerUser        User?             @relation("UserOrders", fields: [ownerUserId], references: [id], onDelete: SetNull)
   whatsappInstance WhatsappInstance? @relation(fields: [whatsappInstanceId], references: [id], onDelete: SetNull)
   items            OrderItem[]
+  delivery         Delivery?
 
   @@index([ownerUserId, status, createdAt])
   @@index([whatsappInstanceId, customerWhatsappId, createdAt])
+}
+
+model Rider {
+  id                 String                  @id @default(cuid())
+  userId             String                  @unique
+  ownerUserId        String?
+  displayName        String?
+  documentNumber     String?                 @unique
+  cnhNumber          String?                 @unique
+  vehicleType        RiderVehicleType        @default(MOTORCYCLE)
+  vehiclePlate       String?
+  status             RiderStatus             @default(PENDING_REVIEW)
+  availabilityStatus RiderAvailabilityStatus @default(OFFLINE)
+  isStoreOwned       Boolean                 @default(false)
+  currentLatitude    Float?
+  currentLongitude   Float?
+  lastLocationAt     DateTime?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  user       User               @relation("RiderUser", fields: [userId], references: [id], onDelete: Cascade)
+  ownerUser  User?              @relation("StoreOwnedRiders", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  deliveries Delivery[]
+  locations  DeliveryLocation[]
+  payouts    DeliveryPayout[]
+
+  @@index([ownerUserId, status])
+  @@index([availabilityStatus, status])
+  @@index([vehiclePlate])
+}
+
+model Delivery {
+  id                         String                   @id @default(cuid())
+  ownerUserId                String
+  orderId                    String                   @unique
+  riderId                    String?
+  status                     DeliveryStatus           @default(WAITING_RIDER)
+  assignmentType             DeliveryAssignmentType   @default(MARKETPLACE)
+  paymentHandledBy           DeliveryPaymentHandledBy @default(RIDER)
+  orderTotalCollectedByStore Boolean                  @default(false)
+  distanceMeters             Int?
+  quotedPriceCents           Int                      @default(0)
+  riderPayoutCents           Int                      @default(0)
+  currency                   String                   @default("BRL")
+  pickupAddress              String?                  @db.Text
+  pickupLatitude             Float?
+  pickupLongitude            Float?
+  destinationAddress         String                   @db.Text
+  destinationLatitude        Float?
+  destinationLongitude       Float?
+  acceptedAt                 DateTime?
+  pickedUpAt                 DateTime?
+  deliveredAt                DateTime?
+  canceledAt                 DateTime?
+  cancellationReason         String?                  @db.Text
+  createdAt                  DateTime                 @default(now())
+  updatedAt                  DateTime                 @updatedAt
+
+  ownerUser User               @relation("StoreDeliveries", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  order     Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  rider     Rider?             @relation(fields: [riderId], references: [id], onDelete: SetNull)
+  locations DeliveryLocation[]
+  payout    DeliveryPayout?
+
+  @@index([ownerUserId, status, createdAt])
+  @@index([riderId, status])
+  @@index([assignmentType, status])
+}
+
+model DeliveryLocation {
+  id             String   @id @default(cuid())
+  deliveryId     String
+  riderId        String?
+  latitude       Float
+  longitude      Float
+  accuracyMeters Float?
+  recordedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  rider    Rider?   @relation(fields: [riderId], references: [id], onDelete: SetNull)
+
+  @@index([deliveryId, recordedAt])
+  @@index([riderId, recordedAt])
+}
+
+model DeliveryPayout {
+  id                 String                       @id @default(cuid())
+  deliveryId         String                       @unique
+  riderId            String
+  ownerUserId        String
+  amountCents        Int
+  deliveryFeeCents   Int                          @default(0)
+  riderProfitCents   Int                          @default(0)
+  storeDebitCents    Int                          @default(0)
+  riderRetainedCents Int                          @default(0)
+  settlementType     DeliveryPayoutSettlementType @default(STORE_DEBIT)
+  currency           String                       @default("BRL")
+  status             DeliveryPayoutStatus         @default(PENDING)
+  processedAt        DateTime?
+  failureReason      String?                      @db.Text
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+
+  delivery  Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  rider     Rider    @relation(fields: [riderId], references: [id], onDelete: Cascade)
+  ownerUser User     @relation("StoreDeliveryPayouts", fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@index([riderId, status, createdAt])
+  @@index([ownerUserId, status, createdAt])
 }
 
 model OrderItem {

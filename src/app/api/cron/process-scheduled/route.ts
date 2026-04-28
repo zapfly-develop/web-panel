@@ -1,18 +1,12 @@
 import { NextResponse } from "next/server";
+import { getNestApiBaseUrl } from "@/lib/nest-api";
 
 export const runtime = "edge";
 
 export async function GET() {
     try {
-        const nestUrl = process.env.NEST_API_URL;
+        const nestUrl = getNestApiBaseUrl();
         const secret = process.env.CRON_SECRET;
-
-        if (!nestUrl) {
-            return NextResponse.json(
-                { error: "NEST_API_URL não configurado." },
-                { status: 500 },
-            );
-        }
 
         const res = await fetch(`${nestUrl}/templates/process-jobs`, {
             method: "POST",
@@ -24,12 +18,14 @@ export async function GET() {
 
         const data = await res.json();
         return NextResponse.json(data, { status: res.status });
-    } catch (error: any) {
-        console.log("Erro na cron", error.message);
+    } catch (error: unknown) {
+        const message =
+            error instanceof Error ? error.message : "Erro desconhecido";
+        console.log("Erro na cron", message);
         return NextResponse.json(
             {
                 message: "erro aop processar cron jobs",
-                details: error.message,
+                details: message,
             },
             { status: 500 },
         );

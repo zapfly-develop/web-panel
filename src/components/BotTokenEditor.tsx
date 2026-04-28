@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import axios from "axios";
+import { getRequiredPublicNestApiBaseUrl } from "@/lib/nest-api";
 
 interface Props {
     botId: string;
@@ -9,6 +10,19 @@ interface Props {
 }
 
 type Status = "idle" | "saving" | "registering" | "done" | "error";
+
+type AxiosErrorLike = {
+    response?: {
+        data?: {
+            message?: string;
+        };
+    };
+};
+
+function getErrorMessage(error: unknown, fallback: string): string {
+    const axiosError = error as AxiosErrorLike;
+    return axiosError.response?.data?.message || fallback;
+}
 
 export function BotTokenEditor({ botId, currentToken, onSave }: Props) {
     const [editing, setEditing] = useState(false);
@@ -28,7 +42,7 @@ export function BotTokenEditor({ botId, currentToken, onSave }: Props) {
             // 2. Inicializa o bot no NestJS em tempo real (sem restart)
             setStatus("registering");
             await axios.post(
-                `${process.env.NEXT_PUBLIC_NEST_API_URL}/telegram/register-business-bot`,
+                `${getRequiredPublicNestApiBaseUrl()}/telegram/register-business-bot`,
                 {
                     botId,
                     token,
@@ -40,10 +54,12 @@ export function BotTokenEditor({ botId, currentToken, onSave }: Props) {
 
             // Reseta o indicador de sucesso após 3s
             setTimeout(() => setStatus("idle"), 3000);
-        } catch (err: any) {
+        } catch (err: unknown) {
             setErrorMsg(
-                err.response?.data?.message ||
+                getErrorMessage(
+                    err,
                     "Erro ao registrar o bot. Verifique o token.",
+                ),
             );
             setStatus("error");
         }
