@@ -25,10 +25,7 @@ export type GoogleMapsMarker = {
 
 export type GoogleMapsGlobal = {
     maps: {
-        Map: new (
-            element: HTMLElement,
-            options: GoogleMapsMapOptions,
-        ) => GoogleMapsMap;
+        Map: typeof google.maps.Map;
         Marker: new (options: GoogleMapsMarkerOptions) => GoogleMapsMarker;
         LatLngBounds: new () => GoogleMapsLatLngBounds;
         Point: new (x: number, y: number) => unknown;
@@ -52,6 +49,7 @@ type GoogleMapsMapOptions = {
     mapTypeControl?: boolean;
     streetViewControl?: boolean;
     zoomControl?: boolean;
+    keyboardShortcuts?: boolean;
 };
 
 type GoogleMapsMarkerIcon = {
