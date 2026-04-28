@@ -2,9 +2,9 @@
 
 ## Identidade
 
-Este projeto e o backend NestJS do sistema de atendimento e vendas por WhatsApp e Telegram com IA humanizada. O produto e um SaaS multitenant para negocios locais e digitais, com suporte a perfis como mercearia, restaurante, lanchonete e eventos.
+Este projeto e o frontend Next16 do sistema de atendimento e vendas por WhatsApp e Telegram com IA humanizada. O produto e um SaaS multitenant para negocios locais e digitais, com suporte a perfis como mercearia, restaurante, lanchonete e eventos.
 
-O nome do pacote ainda e `telegram-user-service-nest`, mas o escopo atual e maior: atendimento WhatsApp via Evolution, automacao Telegram Business, catalogo, carrinho, pedidos, billing, campanhas e decisao com IA.
+O nome do pacote ainda e `zapfly`, mas o escopo atual e maior: atendimento WhatsApp via Evolution, automacao Telegram Business, catalogo, carrinho, pedidos, billing, campanhas e decisao com IA.
 
 ## Proposta
 
@@ -48,15 +48,15 @@ O objetivo tecnico e manter um monolito modular pragmatico: um unico deploy/proc
 
 - Dados duraveis ficam no Postgres, modelados em `prisma/schema.prisma`.
 - Estado temporario e operacional fica no Redis:
-  - filas BullMQ;
-  - carrinho temporario;
-  - presenca e ultima geolocalizacao dos entregadores;
-  - processamento assincrono de repasse de entregas;
-  - debounce WhatsApp;
-  - locks de cron;
-  - circuit breaker de Gemini;
-  - cache runtime de conexoes Telegram;
-  - rate limit de envio WhatsApp.
+    - filas BullMQ;
+    - carrinho temporario;
+    - presenca e ultima geolocalizacao dos entregadores;
+    - processamento assincrono de repasse de entregas;
+    - debounce WhatsApp;
+    - locks de cron;
+    - circuit breaker de Gemini;
+    - cache runtime de conexoes Telegram;
+    - rate limit de envio WhatsApp.
 
 ## Arquivos de Entrada Importantes
 

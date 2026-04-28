@@ -32,9 +32,7 @@ export function DailyStats({
         <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
             <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 p-4 text-white">
                 <h3 className="text-lg font-bold">Estatísticas de Hoje</h3>
-                <p className="text-sm opacity-90">
-                    Seu desempenho até agora
-                </p>
+                <p className="text-sm opacity-90">Seu desempenho até agora</p>
             </div>
             <div className="grid grid-cols-2 gap-4 p-4">
                 <div className="rounded-xl bg-gradient-to-br from-sky-50 to-sky-100 p-4">
@@ -51,7 +49,9 @@ export function DailyStats({
                     <div className="mb-2 inline-flex rounded-lg bg-white p-2 shadow-sm">
                         <DollarSign className="h-5 w-5 text-emerald-600" />
                     </div>
-                    <p className="text-xs font-medium text-emerald-700">Ganhos</p>
+                    <p className="text-xs font-medium text-emerald-700">
+                        Ganhos
+                    </p>
                     <p className="mt-1 text-2xl font-bold text-emerald-950">
                         {formatMoney(totalEarnings)}
                     </p>
@@ -86,6 +86,13 @@ export function DailyStats({
 // Placeholder para quando integrar Google Maps/Mapbox
 // ===================================================================
 
+import { useMemo } from "react";
+import {
+    GoogleMap,
+    Marker,
+    Polyline,
+    useJsApiLoader,
+} from "@react-google-maps/api";
 import { MapPin, Navigation } from "lucide-react";
 
 type DeliveryMapProps = {
@@ -93,8 +100,143 @@ type DeliveryMapProps = {
     pickupLng?: number | null;
     destLat?: number | null;
     destLng?: number | null;
-    distanceKm?: number;
+    distanceKm?: number | null;
 };
+
+const containerStyle = {
+    width: "100%",
+    height: "100%",
+};
+
+export function DeliveryMap({
+    pickupLat,
+    pickupLng,
+    destLat,
+    destLng,
+    distanceKm,
+}: DeliveryMapProps) {
+    const { isLoaded } = useJsApiLoader({
+        id: "google-map-script",
+        googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!,
+    });
+
+    const center = useMemo(() => {
+        if (pickupLat && pickupLng) {
+            return { lat: pickupLat, lng: pickupLng };
+        }
+
+        if (destLat && destLng) {
+            return { lat: destLat, lng: destLng };
+        }
+
+        return { lat: -23.55052, lng: -46.633308 };
+    }, [pickupLat, pickupLng, destLat, destLng]);
+
+    const path = useMemo(() => {
+        if (!pickupLat || !pickupLng || !destLat || !destLng) return [];
+
+        return [
+            { lat: pickupLat, lng: pickupLng },
+            { lat: destLat, lng: destLng },
+        ];
+    }, [pickupLat, pickupLng, destLat, destLng]);
+
+    if (!isLoaded) {
+        return (
+            <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
+                <div className="relative aspect-[16/10] bg-gradient-to-br from-slate-100 to-slate-200">
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="text-center">
+                            <Navigation className="mx-auto h-12 w-12 text-slate-400" />
+                            <p className="mt-2 text-sm font-medium text-slate-600">
+                                Carregando mapa
+                            </p>
+                            <p className="text-xs text-slate-500">
+                                {distanceKm
+                                    ? `${distanceKm.toFixed(1)} km`
+                                    : "Calculando..."}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
+            <div className="relative aspect-[16/10]">
+                <GoogleMap
+                    mapContainerStyle={containerStyle}
+                    center={center}
+                    zoom={13}
+                    options={{
+                        disableDefaultUI: true,
+                        zoomControl: false,
+                        streetViewControl: false,
+                        mapTypeControl: false,
+                        fullscreenControl: false,
+                        clickableIcons: false,
+                        keyboardShortcuts: false,
+                        gestureHandling: "greedy",
+                    }}
+                >
+                    {pickupLat && pickupLng && (
+                        <Marker
+                            position={{ lat: pickupLat, lng: pickupLng }}
+                            icon={{
+                                path: window.google.maps.SymbolPath.CIRCLE,
+                                scale: 8,
+                                fillColor: "#0ea5e9",
+                                fillOpacity: 1,
+                                strokeColor: "#ffffff",
+                                strokeWeight: 2,
+                            }}
+                        />
+                    )}
+
+                    {destLat && destLng && (
+                        <Marker
+                            position={{ lat: destLat, lng: destLng }}
+                            icon={{
+                                path: window.google.maps.SymbolPath.CIRCLE,
+                                scale: 8,
+                                fillColor: "#10b981",
+                                fillOpacity: 1,
+                                strokeColor: "#ffffff",
+                                strokeWeight: 2,
+                            }}
+                        />
+                    )}
+
+                    {path.length === 2 && (
+                        <Polyline
+                            path={path}
+                            options={{
+                                strokeColor: "#0f172a",
+                                strokeOpacity: 0.8,
+                                strokeWeight: 4,
+                            }}
+                        />
+                    )}
+                </GoogleMap>
+            </div>
+
+            <div className="p-4">
+                <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                        <div className="h-3 w-3 rounded-full bg-sky-500" />
+                        <span className="text-slate-600">Origem</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-slate-600">Destino</span>
+                        <div className="h-3 w-3 rounded-full bg-emerald-500" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 export function DeliveryMapPlaceholder({
     pickupLat,
@@ -115,7 +257,9 @@ export function DeliveryMapPlaceholder({
                             Mapa da rota
                         </p>
                         <p className="text-xs text-slate-500">
-                            {distanceKm ? `${distanceKm.toFixed(1)} km` : "Calculando..."}
+                            {distanceKm
+                                ? `${distanceKm.toFixed(1)} km`
+                                : "Calculando..."}
                         </p>
                     </div>
                 </div>
@@ -174,19 +318,32 @@ export function DeliveryTimeline({
             key: "assigned",
             label: "Atribuída",
             time: null,
-            completed: ["ASSIGNED", "ACCEPTED", "PICKED_UP", "IN_TRANSIT", "DELIVERED"].includes(currentStatus),
+            completed: [
+                "ASSIGNED",
+                "ACCEPTED",
+                "PICKED_UP",
+                "IN_TRANSIT",
+                "DELIVERED",
+            ].includes(currentStatus),
         },
         {
             key: "accepted",
             label: "Aceita",
             time: acceptedAt,
-            completed: ["ACCEPTED", "PICKED_UP", "IN_TRANSIT", "DELIVERED"].includes(currentStatus),
+            completed: [
+                "ACCEPTED",
+                "PICKED_UP",
+                "IN_TRANSIT",
+                "DELIVERED",
+            ].includes(currentStatus),
         },
         {
             key: "picked_up",
             label: "Coletada",
             time: pickedUpAt,
-            completed: ["PICKED_UP", "IN_TRANSIT", "DELIVERED"].includes(currentStatus),
+            completed: ["PICKED_UP", "IN_TRANSIT", "DELIVERED"].includes(
+                currentStatus,
+            ),
         },
         {
             key: "delivered",
@@ -213,15 +370,23 @@ export function DeliveryTimeline({
                                 <Circle className="h-6 w-6 text-slate-300" />
                             )}
                             {index < steps.length - 1 && (
-                                <div className={`absolute left-3 top-6 h-8 w-0.5 ${
-                                    step.completed ? "bg-emerald-500" : "bg-slate-200"
-                                }`} />
+                                <div
+                                    className={`absolute left-3 top-6 h-8 w-0.5 ${
+                                        step.completed
+                                            ? "bg-emerald-500"
+                                            : "bg-slate-200"
+                                    }`}
+                                />
                             )}
                         </div>
                         <div className="flex-1">
-                            <p className={`text-sm font-medium ${
-                                step.completed ? "text-slate-900" : "text-slate-400"
-                            }`}>
+                            <p
+                                className={`text-sm font-medium ${
+                                    step.completed
+                                        ? "text-slate-900"
+                                        : "text-slate-400"
+                                }`}
+                            >
                                 {step.label}
                             </p>
                             {step.time && (
@@ -284,7 +449,9 @@ export function InAppNotification({
 
     return (
         <div className="fixed left-4 right-4 top-4 z-50 mx-auto max-w-md animate-slide-down">
-            <div className={`rounded-2xl bg-gradient-to-r ${colors[type]} p-4 text-white shadow-2xl`}>
+            <div
+                className={`rounded-2xl bg-gradient-to-r ${colors[type]} p-4 text-white shadow-2xl`}
+            >
                 <div className="flex items-start gap-3">
                     <div className="rounded-full bg-white/20 p-2 backdrop-blur-sm">
                         <Bell className="h-5 w-5" />
@@ -312,7 +479,6 @@ export function InAppNotification({
 // 5. COMPONENTE DE GANHOS DO DIA (EARNINGS CARD)
 // Card focado em mostrar ganhos de forma atrativa
 // ===================================================================
-
 
 type EarningsCardProps = {
     todayEarnings: number;
@@ -369,9 +535,7 @@ export function EarningsCard({
 
                 <div className="mt-3 flex items-center gap-2 text-sm">
                     <TrendingUp className="h-4 w-4" />
-                    <span className="opacity-90">
-                        +23% vs. semana passada
-                    </span>
+                    <span className="opacity-90">+23% vs. semana passada</span>
                 </div>
             </div>
         </div>
