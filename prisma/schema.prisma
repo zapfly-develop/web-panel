@@ -58,25 +58,49 @@ model User {
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
 
-  bots               BotAccount[]
-  products           Product[]
-  templates          MessageTemplate[]
-  subscription       Subscription?
-  transactions       Transaction[]
-  whatsappInstances  WhatsappInstance[]
-  whatsappCustomers  WhatsappCustomer[]
-  orders             Order[]             @relation("UserOrders")
-  whatsappHandovers  WhatsappHandover[]
-  operatingHours     OperatingHour[]     @relation("SubscriberOperatingHours")
-  tags               Tag[]               @relation("SubscriberTags")
-  productTags        ProductTags[]       @relation("SubscriberProductTags")
-  riderProfile       Rider?              @relation("RiderUser")
-  storeRiders        Rider[]             @relation("StoreOwnedRiders")
-  storeDeliveries    Delivery[]          @relation("StoreDeliveries")
-  deliveryPayouts    DeliveryPayout[]    @relation("StoreDeliveryPayouts")
-  pushSubscriptions  PushSubscription[]
-  wallet             Wallet?
-  walletTransactions WalletTransaction[]
+  bots                BotAccount[]
+  products            Product[]
+  templates           MessageTemplate[]
+  subscription        Subscription?
+  transactions        Transaction[]
+  whatsappInstances   WhatsappInstance[]
+  whatsappCustomers   WhatsappCustomer[]
+  orders              Order[]             @relation("UserOrders")
+  storeAddressDetails StoreAddress?
+  whatsappHandovers   WhatsappHandover[]
+  operatingHours      OperatingHour[]     @relation("SubscriberOperatingHours")
+  tags                Tag[]               @relation("SubscriberTags")
+  productTags         ProductTags[]       @relation("SubscriberProductTags")
+  riderProfile        Rider?              @relation("RiderUser")
+  storeRiders         Rider[]             @relation("StoreOwnedRiders")
+  storeDeliveries     Delivery[]          @relation("StoreDeliveries")
+  deliveryPayouts     DeliveryPayout[]    @relation("StoreDeliveryPayouts")
+  pushSubscriptions   PushSubscription[]
+  wallet              Wallet?
+  walletTransactions  WalletTransaction[]
+}
+
+model StoreAddress {
+  id               String   @id @default(cuid())
+  ownerUserId      String   @unique
+  street           String
+  number           String
+  neighborhood     String?
+  complement       String?
+  city             String
+  state            String
+  postalCode       String?
+  country          String   @default("BR")
+  formattedAddress String   @db.Text
+  latitude         Float
+  longitude        Float
+  geocodedAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  ownerUser User @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@index([city, state])
 }
 
 model PushSubscription {
