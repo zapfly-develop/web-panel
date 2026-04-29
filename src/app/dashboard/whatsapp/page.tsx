@@ -11,6 +11,7 @@ import QRConnection from "@/components/dashboard/qr-connection";
 import ManualStoreStatusForm from "@/components/dashboard/whatsapp/manual-store-status-form";
 import OperatingHoursForm from "@/components/dashboard/whatsapp/operating-hours-form";
 import StoreCheckoutSettingsForm from "@/components/dashboard/whatsapp/store-checkout-settings-form";
+import StoreAddressForm from "@/components/dashboard/whatsapp/store-address-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +44,7 @@ import {
     updateManualStoreClosedAction,
     updateOperatingHoursAction,
     updateStoreCheckoutSettingsAction,
+    updateStructuredStoreAddressAction,
     updateWhatsappClosedMessageAction,
 } from "./actions";
 import {
@@ -118,6 +120,7 @@ export default async function DashboardWhatsappPage() {
             storeAddress: true,
             acceptedPaymentMethods: true,
             availableDeliveryTypes: true,
+            storeAddressDetails: true,
             operatingHours: {
                 orderBy: {
                     dayOfWeek: "asc",
@@ -350,8 +353,6 @@ export default async function DashboardWhatsappPage() {
                             acceptedPaymentMethods,
                             availableDeliveryTypes,
                         }}
-                        assistantProfileAction={updateAssistantProfileAction}
-                        storeCheckoutAction={updateStoreCheckoutSettingsAction}
                     />
                 </div>
 
@@ -362,37 +363,139 @@ export default async function DashboardWhatsappPage() {
                             Configuracoes da operacao
                         </CardTitle>
                         <CardDescription>
-                            Use as abas para controlar a loja sem poluir a tela.
+                            Gerencie sua loja e o checkout estruturado em abas.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <Tabs defaultValue="store" className="gap-4">
-                            <TabsList className="h-auto w-full justify-start gap-1 rounded-xl bg-slate-100 p-1">
+                        <Tabs defaultValue="connection" className="gap-4">
+                            <TabsList className="h-auto w-full justify-start gap-1 rounded-xl bg-slate-100 p-1 flex-wrap">
+                                <TabsTrigger value="connection">
+                                    <PlugZap className="h-4 w-4" />
+                                    Conexão
+                                </TabsTrigger>
                                 <TabsTrigger value="store">
                                     <Store className="h-4 w-4" />
-                                    Loja
+                                    Loja & Endereço
                                 </TabsTrigger>
-                                <TabsTrigger value="message">
-                                    <MessageCircle className="h-4 w-4" />
-                                    Ausencia
+                                <TabsTrigger value="logistics">
+                                    <Settings2 className="h-4 w-4" />
+                                    Logística & Pagamentos
                                 </TabsTrigger>
                                 <TabsTrigger value="hours">
                                     <Clock3 className="h-4 w-4" />
-                                    Horarios
+                                    Horários
                                 </TabsTrigger>
                             </TabsList>
 
-                            <TabsContent value="store" className="space-y-4">
+                            {/* ABA 1: CONEXÃO */}
+                            <TabsContent value="connection" className="space-y-4 outline-none">
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Resumo da Instância</p>
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                        <div className="space-y-1">
+                                            <p className="text-xs text-slate-400">Status Atual</p>
+                                            <p className="text-sm font-medium text-slate-900">{primaryInstance?.status || "Desconectado"}</p>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="text-xs text-slate-400">Atendente Responsável</p>
+                                            <p className="text-sm font-medium text-slate-900">{assistantName}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <ManualStoreStatusForm
                                     defaultClosed={manualStoreClosed}
                                     action={updateManualStoreClosedAction}
                                 />
 
-                                <AssistantProfileForm
-                                    defaultAssistantName={assistantName}
-                                    defaultBusinessProfile={businessProfile}
-                                    action={updateAssistantProfileAction}
-                                />
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-2 px-1">
+                                        <MessageCircle className="h-4 w-4 text-primary" />
+                                        <Label htmlFor="closedMessage" className="text-sm font-semibold">Mensagem de Ausência</Label>
+                                    </div>
+                                    <form
+                                        action={updateWhatsappClosedMessageAction}
+                                        className="space-y-3"
+                                    >
+                                        <Textarea
+                                            id="closedMessage"
+                                            name="closedMessage"
+                                            rows={3}
+                                            defaultValue={
+                                                userSettings?.closedMessage ??
+                                                "Ola! No momento estamos descansando para melhor atende-lo amanha as 08h."
+                                            }
+                                            placeholder="Mensagem automática para quando a loja estiver fechada"
+                                            className="bg-slate-50"
+                                        />
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-[10px] text-slate-500 max-w-[200px]">
+                                                Deixe em branco para usar o padrão do sistema.
+                                            </p>
+                                            <Button type="submit" size="sm" variant="outline">
+                                                Salvar Mensagem
+                                            </Button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </TabsContent>
+
+                            {/* ABA 2: LOJA & ENDEREÇO */}
+                            <TabsContent value="store" className="space-y-6 outline-none">
+                                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                                        <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">📍 Endereço Ativo</p>
+                                    </div>
+                                    <p className="text-sm text-emerald-900 leading-relaxed">
+                                        {storeAddress || "Nenhum endereço configurado ainda."}
+                                    </p>
+                                </div>
+
+                                <section className="space-y-4">
+                                    <div className="space-y-1">
+                                        <h4 className="text-sm font-semibold text-slate-900">Perfil do Negócio</h4>
+                                        <p className="text-xs text-slate-500">Como sua loja se apresenta para os clientes.</p>
+                                    </div>
+                                    <AssistantProfileForm
+                                        defaultAssistantName={assistantName}
+                                        defaultBusinessProfile={businessProfile}
+                                        action={updateAssistantProfileAction}
+                                    />
+                                </section>
+
+                                <section className="space-y-4">
+                                    <div className="space-y-1">
+                                        <h4 className="text-sm font-semibold text-slate-900">Gestão de Endereço Estruturado</h4>
+                                        <p className="text-xs text-slate-500">Essencial para o cálculo de frete e geolocalização.</p>
+                                    </div>
+                                    <StoreAddressForm
+                                        defaultValues={userSettings?.storeAddressDetails ? {
+                                            postalCode: userSettings.storeAddressDetails.postalCode || "",
+                                            street: userSettings.storeAddressDetails.street,
+                                            number: userSettings.storeAddressDetails.number,
+                                            neighborhood: userSettings.storeAddressDetails.neighborhood || "",
+                                            complement: userSettings.storeAddressDetails.complement || "",
+                                            city: userSettings.storeAddressDetails.city,
+                                            state: userSettings.storeAddressDetails.state,
+                                        } : undefined}
+                                        onSubmit={updateStructuredStoreAddressAction}
+                                    />
+                                </section>
+                            </TabsContent>
+
+                            {/* ABA 3: LOGÍSTICA & PAGAMENTOS */}
+                            <TabsContent value="logistics" className="space-y-4 outline-none">
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Taxa de Entrega</p>
+                                        <p className="mt-1 text-sm font-bold text-slate-900">{deliveryFeeLabel}</p>
+                                    </div>
+                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Pagamentos</p>
+                                        <p className="mt-1 text-sm font-medium text-slate-900 truncate">{paymentMethodsLabel}</p>
+                                    </div>
+                                </div>
 
                                 <StoreCheckoutSettingsForm
                                     defaultStoreAddress={storeAddress}
@@ -407,110 +510,19 @@ export default async function DashboardWhatsappPage() {
                                     }
                                     action={updateStoreCheckoutSettingsAction}
                                 />
+                            </TabsContent>
 
-                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                                            Atendente
-                                        </p>
-                                        <p className="mt-1 text-sm font-medium text-slate-900">
-                                            {assistantName}
-                                        </p>
-                                    </div>
-                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                                            Perfil
-                                        </p>
-                                        <p className="mt-1 text-sm font-medium text-slate-900">
-                                            {businessProfileLabel}
-                                        </p>
-                                    </div>
-                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                                            Endereco da loja
-                                        </p>
-                                        <p className="mt-1 text-sm text-slate-600">
-                                            {storeAddress || "Ainda nao configurado"}
-                                        </p>
-                                    </div>
-                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                                            Timezone
-                                        </p>
-                                        <p className="mt-1 text-sm font-medium text-slate-900">
-                                            {operatingTimezone}
-                                        </p>
-                                    </div>
-                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                                            Taxa de entrega
-                                        </p>
-                                        <p className="mt-1 text-sm font-medium text-slate-900">
-                                            {deliveryFeeLabel}
-                                        </p>
-                                    </div>
-                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                                            Pagamentos aceitos
-                                        </p>
-                                        <p className="mt-1 text-sm text-slate-600">
-                                            {paymentMethodsLabel}
-                                        </p>
-                                    </div>
-                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 lg:col-span-2">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                                            Modalidades ativas
-                                        </p>
-                                        <p className="mt-1 text-sm text-slate-600">
-                                            {deliveryTypesLabel}
-                                        </p>
-                                    </div>
-                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                                            Mensagem padrao
-                                        </p>
-                                        <p className="mt-1 text-sm text-slate-600">
-                                            {userSettings?.closedMessage?.trim()
-                                                ? "Personalizada pelo assinante"
-                                                : "Usando mensagem padrao do sistema"}
-                                        </p>
+                            {/* ABA 4: HORÁRIOS */}
+                            <TabsContent value="hours" className="space-y-4 outline-none">
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 mb-2">
+                                    <div className="flex items-center justify-between">
+                                        <div className="space-y-1">
+                                            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Fuso Horário</p>
+                                            <p className="text-sm font-medium text-slate-900">{operatingTimezone}</p>
+                                        </div>
+                                        <Clock3 className="h-5 w-5 text-slate-400" />
                                     </div>
                                 </div>
-                            </TabsContent>
-
-                            <TabsContent value="message" className="space-y-4">
-                                <form
-                                    action={updateWhatsappClosedMessageAction}
-                                    className="space-y-3"
-                                >
-                                    <div className="space-y-2">
-                                        <Label htmlFor="closedMessage">
-                                            Mensagem de ausencia
-                                        </Label>
-                                        <Textarea
-                                            id="closedMessage"
-                                            name="closedMessage"
-                                            rows={5}
-                                            defaultValue={
-                                                userSettings?.closedMessage ??
-                                                "Ola! No momento estamos descansando para melhor atende-lo amanha as 08h."
-                                            }
-                                            placeholder="Digite a mensagem automatica para quando a loja estiver fechada"
-                                        />
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-3">
-                                        <Button type="submit" size="sm">
-                                            Salvar mensagem
-                                        </Button>
-                                        <p className="text-xs text-slate-500">
-                                            Se deixar em branco, o sistema usa a
-                                            mensagem padrao.
-                                        </p>
-                                    </div>
-                                </form>
-                            </TabsContent>
-
-                            <TabsContent value="hours" className="space-y-4">
                                 <OperatingHoursForm
                                     rows={operatingHourRows}
                                     timezone={operatingTimezone}

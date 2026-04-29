@@ -6,7 +6,7 @@
 // Mostra métricas do dia atual do rider
 // ===================================================================
 
-import { TrendingUp, Package, Clock, DollarSign } from "lucide-react";
+import { TrendingUp, Package, Clock, DollarSign, Bike } from "lucide-react";
 
 type DailyStatsProps = {
     deliveriesCompleted: number;

@@ -5,6 +5,8 @@ import type {
     DeliveryStatusFilter,
     RiderAvailabilityStatus,
     RiderLocationPayload,
+    StoreAddress,
+    StoreAddressPayload,
     StoreDelivery,
 } from "./delivery-types";
 
@@ -57,6 +59,17 @@ export async function listAvailableDeliveryRiders(
 ): Promise<DeliveryRider[]> {
     return fetchNestApiJson<DeliveryRider[]>("/delivery/riders/available", {
         headers: buildTenantHeaders(userId),
+    });
+}
+
+export async function updateStoreAddress(
+    userId: string,
+    payload: StoreAddressPayload,
+): Promise<StoreAddress> {
+    return fetchNestApiJson<StoreAddress>("/delivery/store-address", {
+        method: "PUT",
+        headers: buildJsonTenantHeaders(userId),
+        body: JSON.stringify(payload),
     });
 }
 
