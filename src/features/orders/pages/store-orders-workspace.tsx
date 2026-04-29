@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { DropResult } from "@hello-pangea/dnd";
 import { PackageSearch } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import type {
 import { useDeliveryRealtime } from "@/features/delivery/hooks/use-delivery-realtime";
 import type {
     OrderPaymentFilter,
+    OrderStatus,
     OrderStatusFilter,
     OrderTimeFilter,
     OrdersViewMode,
@@ -32,6 +34,7 @@ import { OrdersPerformanceSummary } from "../components/orders-performance-summa
 import { OrdersTableView } from "../components/orders-table-view";
 import { RiderOperationsMap } from "../components/rider-operations-map";
 import { useOrdersRealtime } from "../hooks/use-orders-realtime";
+import { updateOrderStatus } from "../services/orders-api";
 
 type StoreOrdersWorkspaceProps = {
     userId: string;
@@ -283,6 +286,60 @@ export function StoreOrdersWorkspace({
         window.setTimeout(() => window.print(), 120);
     }
 
+    async function handleDragEnd(result: DropResult) {
+        const { destination, source, draggableId } = result;
+
+        if (!destination) return;
+
+        if (
+            destination.droppableId === source.droppableId &&
+            destination.index === source.index
+        ) {
+            return;
+        }
+
+        const orderId = draggableId;
+        const newStatus = destination.droppableId as OrderStatus;
+        const oldStatus = source.droppableId as OrderStatus;
+
+        if (newStatus === "PENDING") {
+            toast.error("Não é possível mover pedidos para Pendente.");
+            return;
+        }
+
+        if (oldStatus === "DELIVERED") {
+            toast.error("Pedidos entregues não podem ser alterados.");
+            return;
+        }
+
+        // Optimistic update
+        const orderToUpdate = orders.find((o) => o.id === orderId);
+        if (!orderToUpdate) return;
+
+        const originalOrders = [...orders];
+        const updatedOrder = { ...orderToUpdate, status: newStatus };
+
+        setOrders((current) =>
+            sortOrders(current.map((o) => o.id === orderId ? updatedOrder : o))
+        );
+
+        try {
+            await updateOrderStatus(orderId, userId, {
+                status: newStatus,
+                notifyCustomer: newStatus === "SHIPPED",
+            });
+            toast.success(`Pedido movido para ${newStatus}`);
+        } catch (error) {
+            // Revert on error
+            setOrders(originalOrders);
+            toast.error(
+                error instanceof Error
+                    ? error.message
+                    : "Falha ao atualizar status do pedido."
+            );
+        }
+    }
+
     const isRealtimeConnected =
         ordersRealtime.isConnected && deliveryRealtime.isConnected;
     const realtimeLabel = isRealtimeConnected
@@ -350,6 +407,7 @@ export function StoreOrdersWorkspace({
                     onCreateDelivery={(order) => void handleCreateDelivery(order)}
                     onOpenDetails={setSelectedOrder}
                     onPrint={handlePrint}
+                    onDragEnd={handleDragEnd}
                 />
             ) : viewMode === "cards" ? (
                 <OrdersCardView
