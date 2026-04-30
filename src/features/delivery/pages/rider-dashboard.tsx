@@ -101,7 +101,10 @@ function formatDistance(distanceMeters: number | null) {
 }
 
 function isOperationallyOnline(profile: DeliveryRider | null) {
-    return profile?.availabilityStatus === "AVAILABLE";
+    return (
+        profile?.availabilityStatus === "AVAILABLE" ||
+        profile?.availabilityStatus === "BUSY"
+    );
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
