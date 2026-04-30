@@ -110,28 +110,35 @@ cd ..
 
 # 6. Criar .env do front
 
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/teletram-bot?schema=public"
-NEXTAUTH_SECRET=efde69757d24768319e945157dc0f298181ed884f9af551013939f5352e79847
-TELEGRAM_BOT_TOKEN=8571873164:AAFRXaolzTRGxZRQ9icrZB5bFIcyfIrhhOk
-TELEGRAM_WEBHOOK_SECRET=efde69757d24768319e945157dc0f298181ed884f9af551013939f5352e79847
-SYNCPAY_API_URL=
-CRON_SECRET=efde69757d24768319e945157dc0f298181ed884f9af551013939f5352e79847
-APP_BASE_URL=https://migration-springer-klein-perl.trycloudflare.com
-BLOB_READ_WRITE_TOKEN="vercel_blob_rw_24EOt89DvmKbxT6P_3GZ44f7MD5p2rj11ZHA6L4zZcSI93S"
+Use `.env.example` como base e preencha os segredos localmente:
+
+```bash
+cp .env.example .env.local
+```
+
+Para desenvolvimento local no mesmo computador:
+
+```env
+APP_BASE_URL=http://localhost:3000
+NEXTAUTH_URL=http://localhost:3000
+NEST_API_URL=http://localhost:3001
 NEXT_PUBLIC_NEST_API_URL=http://localhost:3001
+```
+
+Para testar o PWA em celular, `NEXT_PUBLIC_NEST_API_URL` deve usar o IP da
+maquina que roda o back-end:
+
+```env
+NEXT_PUBLIC_NEST_API_URL=http://SEU_IP_LOCAL:3001
+```
 
 ---
 
 # 7. Criar .env do back
 
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/app?schema=public"
-CRON_SECRET="efde69757d24768319e945157dc0f298181ed884f9af551013939f5352e79847"
-SYNCPAY_CLIENT_ID="120555ca-053a-4cbb-bda5-fb27e372716f"
-SYNCPAY_CLIENT_SECRET="9e0885ac-c04d-4cdb-8002-d37d189d49b8"
-SYNCPAY_DEFAULT_CPF="27688457874"
-SYNCPAY_DEFAULT_EMAIL="clientes@botelecontents.com"
-SYNCPAY_DEFAULT_PHONE="21995812705"
-SYNCPAY_WEBHOOK_URL="https://ambient-laser-independent-scsi.trycloudflare.com"
+Crie o `.env` no repositório do back-end com os valores reais do banco,
+Redis, SyncPay, Evolution, Telegram e VAPID. Não copie segredos para docs ou
+commits.
 
 ---
 

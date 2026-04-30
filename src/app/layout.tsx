@@ -15,9 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-    title: "Bot Admin Pro",
-    description:
-        "Plataforma de IA para WhatsApp, Telegram, catalogo, pedidos, checkout e operacao comercial.",
+    title: "Floovi",
+    description: "Plataforma de gestão de pedidos e atendimento humanizado.",
 };
 
 export default function RootLayout({

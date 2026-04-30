@@ -1,17 +1,37 @@
 "use client";
 import { useState } from "react";
 import axios from "axios";
+import { getRequiredPublicNestApiBaseUrl } from "@/lib/nest-api";
 
 type Step = "idle" | "code" | "2fa" | "done";
 
-export function BotConnectionManager({ bot }: { bot: any }) {
+type BotConnection = {
+    id: string;
+    phoneNumber: string | null;
+    session?: unknown | null;
+};
+
+type AxiosErrorLike = {
+    response?: {
+        data?: {
+            message?: string;
+        };
+    };
+};
+
+function getErrorMessage(error: unknown, fallback: string): string {
+    const axiosError = error as AxiosErrorLike;
+    return axiosError.response?.data?.message || fallback;
+}
+
+export function BotConnectionManager({ bot }: { bot: BotConnection }) {
     const [step, setStep] = useState<Step>(bot.session ? "done" : "idle");
     const [phoneCode, setPhoneCode] = useState("");
     const [password2FA, setPassword2FA] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
-    const API = process.env.NEXT_PUBLIC_NEST_API_URL + "/telegram";
+    const API = `${getRequiredPublicNestApiBaseUrl()}/telegram`;
 
     // ── PASSO 1: Solicitar código SMS ──────────────────────────────────
     const handleSendCode = async () => {
@@ -20,13 +40,15 @@ export function BotConnectionManager({ bot }: { bot: any }) {
         try {
             await axios.post(`${API}/send-code`, {
                 botId: bot.id,
-                phoneNumber: bot.phoneNumber,
+                phoneNumber: bot.phoneNumber ?? "",
             });
             setStep("code");
-        } catch (err: any) {
+        } catch (err: unknown) {
             setError(
-                err.response?.data?.message ||
+                getErrorMessage(
+                    err,
                     "Erro ao enviar código. Verifique as credenciais API.",
+                ),
             );
         } finally {
             setLoading(false);
@@ -41,7 +63,7 @@ export function BotConnectionManager({ bot }: { bot: any }) {
         try {
             const { data } = await axios.post(`${API}/verify-code`, {
                 botId: bot.id,
-                phoneNumber: bot.phoneNumber,
+                phoneNumber: bot.phoneNumber ?? "",
                 code: phoneCode,
             });
 
@@ -52,10 +74,8 @@ export function BotConnectionManager({ bot }: { bot: any }) {
                 // Conta tem senha 2FA — avança para o próximo passo
                 setStep("2fa");
             }
-        } catch (err: any) {
-            setError(
-                err.response?.data?.message || "Código inválido ou expirado.",
-            );
+        } catch (err: unknown) {
+            setError(getErrorMessage(err, "Código inválido ou expirado."));
         } finally {
             setLoading(false);
         }
@@ -76,8 +96,8 @@ export function BotConnectionManager({ bot }: { bot: any }) {
                 setStep("done");
                 window.location.reload();
             }
-        } catch (err: any) {
-            setError(err.response?.data?.message || "Senha incorreta.");
+        } catch (err: unknown) {
+            setError(getErrorMessage(err, "Senha incorreta."));
         } finally {
             setLoading(false);
         }

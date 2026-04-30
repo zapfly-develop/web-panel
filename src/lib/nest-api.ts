@@ -4,6 +4,10 @@ type NestApiOptions = {
     body?: BodyInit | null;
 };
 
+function normalizeBaseUrl(baseUrl: string): string {
+    return baseUrl.trim().replace(/\/$/, "");
+}
+
 export class NestApiError extends Error {
     status: number;
     payload: unknown;
@@ -34,20 +38,28 @@ function extractErrorMessage(payload: unknown, status: number): string {
 }
 
 export function getNestApiBaseUrl(): string {
-    const baseUrl =
-        process.env.NEST_API_URL ||
-        process.env.API_URL ||
-        process.env.NEXT_PUBLIC_NEST_API_URL;
+    const baseUrl = process.env.NEXT_PUBLIC_NEST_API_URL;
 
     if (!baseUrl) {
-        throw new Error("NEST_API_URL is not configured");
+        throw new Error("NEXT_PUBLIC_NEST_API_URL is not configured");
     }
 
-    return baseUrl.replace(/\/$/, "");
+    return normalizeBaseUrl(baseUrl);
 }
 
 export function getPublicNestApiBaseUrl(): string | null {
-    return process.env.NEXT_PUBLIC_NEST_API_URL?.replace(/\/$/, "") ?? null;
+    const baseUrl = process.env.NEXT_PUBLIC_NEST_API_URL;
+    return baseUrl ? normalizeBaseUrl(baseUrl) : null;
+}
+
+export function getRequiredPublicNestApiBaseUrl(): string {
+    const baseUrl = getPublicNestApiBaseUrl();
+
+    if (!baseUrl) {
+        throw new Error("NEXT_PUBLIC_NEST_API_URL is not configured");
+    }
+
+    return baseUrl;
 }
 
 export async function fetchNestApiJson<T>(

@@ -55,11 +55,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.next
+      args:
+        NEXT_PUBLIC_NEST_API_URL: ${NEXT_PUBLIC_NEST_API_URL}
     container_name: telebot-next
     restart: always
     depends_on:
       nest: { condition: service_healthy }
     env_file: .env
+    environment:
+      # Dentro da rede Docker, o Next server-side fala com o container Nest.
+      NEST_API_URL: http://nest:3001
     ports:
       - "3000:3000"
     networks:
