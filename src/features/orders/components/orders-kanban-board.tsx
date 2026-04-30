@@ -41,8 +41,8 @@ export function OrdersKanbanBoard({
 
     return (
         <DragDropContext onDragEnd={onDragEnd}>
-            <div className="overflow-x-auto pb-2">
-                <div className="grid min-w-[1080px] grid-cols-4 gap-3">
+            <div className="overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0">
+                <div className="grid min-w-[1000px] lg:min-w-0 lg:grid-cols-4 gap-3">
                     {columns.map((status) => {
                         const columnOrders = ordersByStatus[status];
 
