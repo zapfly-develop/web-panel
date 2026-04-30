@@ -5,12 +5,18 @@ import { io, Socket } from "socket.io-client";
 import { getPublicNestApiBaseUrl } from "@/lib/nest-api";
 import type {
     DeliveryAssignedEvent,
+    DeliveryCustomerRespondedEvent,
+    DeliveryRiderStalledUnassignedEvent,
+    DeliveryRiderStalledWarningEvent,
     DeliveryStatusChangedEvent,
     RiderNewAvailableDeliveryEvent,
     RiderStatusChangedEvent,
 } from "../services/delivery-types";
 import {
     DELIVERY_ASSIGNED_EVENT,
+    DELIVERY_CUSTOMER_RESPONDED_EVENT,
+    DELIVERY_RIDER_STALLED_UNASSIGNED_EVENT,
+    DELIVERY_RIDER_STALLED_WARNING_EVENT,
     DELIVERY_STATUS_CHANGED_EVENT,
     RIDER_NEW_AVAILABLE_DELIVERY_EVENT,
     RIDER_STATUS_CHANGED_EVENT,
@@ -25,6 +31,9 @@ type UseDeliveryRealtimeOptions = {
     onDeliveryStatusChanged?: (event: DeliveryStatusChangedEvent) => void;
     onRiderNewAvailableDelivery?: (event: RiderNewAvailableDeliveryEvent) => void;
     onRiderStatusChanged?: (event: RiderStatusChangedEvent) => void;
+    onCustomerResponded?: (event: DeliveryCustomerRespondedEvent) => void;
+    onRiderStalledWarning?: (event: DeliveryRiderStalledWarningEvent) => void;
+    onRiderStalledUnassigned?: (event: DeliveryRiderStalledUnassignedEvent) => void;
 };
 
 export function useDeliveryRealtime({
@@ -34,6 +43,9 @@ export function useDeliveryRealtime({
     onDeliveryStatusChanged,
     onRiderNewAvailableDelivery,
     onRiderStatusChanged,
+    onCustomerResponded,
+    onRiderStalledWarning,
+    onRiderStalledUnassigned,
 }: UseDeliveryRealtimeOptions) {
     const [status, setStatus] = useState<DeliveryRealtimeStatus>("idle");
     const [lastEventAt, setLastEventAt] = useState<string | null>(null);
@@ -87,6 +99,22 @@ export function useDeliveryRealtime({
             markEventReceived();
             onRiderStatusChanged?.(event);
         };
+        const handleCustomerResponded = (event: DeliveryCustomerRespondedEvent) => {
+            markEventReceived();
+            onCustomerResponded?.(event);
+        };
+        const handleRiderStalledWarning = (
+            event: DeliveryRiderStalledWarningEvent,
+        ) => {
+            markEventReceived();
+            onRiderStalledWarning?.(event);
+        };
+        const handleRiderStalledUnassigned = (
+            event: DeliveryRiderStalledUnassignedEvent,
+        ) => {
+            markEventReceived();
+            onRiderStalledUnassigned?.(event);
+        };
 
         socket.on("connect", handleConnect);
         socket.on("disconnect", handleDisconnect);
@@ -98,6 +126,15 @@ export function useDeliveryRealtime({
             handleRiderNewAvailableDelivery,
         );
         socket.on(RIDER_STATUS_CHANGED_EVENT, handleRiderStatusChanged);
+        socket.on(DELIVERY_CUSTOMER_RESPONDED_EVENT, handleCustomerResponded);
+        socket.on(
+            DELIVERY_RIDER_STALLED_WARNING_EVENT,
+            handleRiderStalledWarning,
+        );
+        socket.on(
+            DELIVERY_RIDER_STALLED_UNASSIGNED_EVENT,
+            handleRiderStalledUnassigned,
+        );
 
         return () => {
             socket.off("connect", handleConnect);
@@ -110,6 +147,18 @@ export function useDeliveryRealtime({
                 handleRiderNewAvailableDelivery,
             );
             socket.off(RIDER_STATUS_CHANGED_EVENT, handleRiderStatusChanged);
+            socket.off(
+                DELIVERY_CUSTOMER_RESPONDED_EVENT,
+                handleCustomerResponded,
+            );
+            socket.off(
+                DELIVERY_RIDER_STALLED_WARNING_EVENT,
+                handleRiderStalledWarning,
+            );
+            socket.off(
+                DELIVERY_RIDER_STALLED_UNASSIGNED_EVENT,
+                handleRiderStalledUnassigned,
+            );
             socket.disconnect();
         };
     }, [
@@ -118,6 +167,9 @@ export function useDeliveryRealtime({
         onDeliveryStatusChanged,
         onRiderNewAvailableDelivery,
         onRiderStatusChanged,
+        onCustomerResponded,
+        onRiderStalledWarning,
+        onRiderStalledUnassigned,
         userId,
     ]);
 

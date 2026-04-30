@@ -11,6 +11,7 @@ import {
     LocateFixed,
     MapPin,
     Menu,
+    MessageSquare,
     PackageCheck,
     Phone,
     Radio,
@@ -22,17 +23,43 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useDeliveryRealtime } from "../hooks/use-delivery-realtime";
 import { useRiderLocation } from "../hooks/use-rider-location";
+import { useDeliveryContingencies } from "../hooks/use-delivery-contingencies";
 import type {
     DeliveryRider,
     DeliveryStatusChangedEvent,
     StoreDelivery,
 } from "../services/delivery-types";
+import {
+    reportClientAbsent,
+    reportRiderIncident,
+} from "../services/delivery-api";
 import {
     DailyStats,
     DeliveryMapPlaceholder,
@@ -46,7 +73,7 @@ type RiderDashboardProps = {
     loadError: string | null;
 };
 
-type DeliveryAction = "accept" | "pick-up" | "complete";
+type DeliveryAction = "accept" | "pick-up" | "complete" | "incident" | "absent";
 
 function formatTime(value: string) {
     return new Intl.DateTimeFormat("pt-BR", {
@@ -112,6 +139,9 @@ export function RiderDashboard({
         null,
     );
     const [activeTab, setActiveTab] = useState<"home" | "delivery">("home");
+    const [isIncidentDialogOpen, setIsIncidentDialogOpen] = useState(false);
+    const [incidentReason, setIncidentReason] = useState("");
+    const [incidentDescription, setIncidentDescription] = useState("");
 
     const isActiveRider = profile?.status === "ACTIVE";
     const isOnline = isOperationallyOnline(profile);
@@ -163,7 +193,31 @@ export function RiderDashboard({
         onDeliveryAssigned: () => void refreshActiveDelivery(),
         onDeliveryStatusChanged: handleDeliveryStatusChanged,
         onRiderStatusChanged: () => void refreshProfile(),
+        onCustomerResponded: (event) => {
+            toast.info(event.message, {
+                description: event.customerMessagePreview,
+                duration: 10000,
+            });
+        },
+        onRiderStalledWarning: (event) => {
+            toast.warning("Você está a caminho?", {
+                description:
+                    "Notamos que você não se moveu em direção à loja. Reporte um incidente se houver problemas.",
+                duration: 10000,
+            });
+        },
+        onRiderStalledUnassigned: (event) => {
+            toast.error("Entrega cancelada por inatividade.", {
+                description: `Você foi bloqueado até ${new Intl.DateTimeFormat(
+                    "pt-BR",
+                    { timeStyle: "short" },
+                ).format(new Date(event.riderBlockedUntil || ""))}`,
+            });
+            void refreshRiderState();
+        },
     });
+
+    const contingencies = useDeliveryContingencies(activeDelivery);
 
     useEffect(() => {
         const interval = window.setInterval(
@@ -253,7 +307,10 @@ export function RiderDashboard({
         }
     }
 
-    async function runDeliveryAction(action: DeliveryAction) {
+    async function runDeliveryAction(
+        action: DeliveryAction,
+        payload?: Record<string, any>,
+    ) {
         if (!activeDelivery) {
             return;
         }
@@ -262,20 +319,37 @@ export function RiderDashboard({
             accept: "aceitar",
             "pick-up": "coletar",
             complete: "finalizar",
+            incident: "reportar incidente",
+            absent: "reportar ausência",
         };
 
         try {
             setRunningAction(action);
 
-            await fetchJson(
-                `/api/delivery/rider/deliveries/${activeDelivery.id}/${action}`,
-                {
-                    method: "POST",
-                },
-            );
+            if (action === "incident") {
+                await reportRiderIncident(
+                    userId,
+                    activeDelivery.id,
+                    payload as { reason: string; description?: string },
+                );
+            } else if (action === "absent") {
+                await reportClientAbsent(userId, activeDelivery.id, payload);
+            } else {
+                await fetchJson(
+                    `/api/delivery/rider/deliveries/${activeDelivery.id}/${action}`,
+                    {
+                        method: "POST",
+                    },
+                );
+            }
+
             await Promise.all([refreshActiveDelivery(), refreshProfile()]);
 
-            toast.success(`Entrega ${actionCopy[action]} concluída.`);
+            toast.success(`Operação ${actionCopy[action]} concluída.`);
+
+            if (action === "incident") {
+                setActiveTab("home");
+            }
         } catch (error) {
             toast.error(
                 error instanceof Error
@@ -318,7 +392,19 @@ export function RiderDashboard({
     const canPickUp =
         activeDelivery?.status === "ASSIGNED" &&
         Boolean(activeDelivery.acceptedAt);
-    const canComplete = activeDelivery?.status === "PICKED_UP";
+    const canComplete =
+        activeDelivery?.status === "PICKED_UP" ||
+        activeDelivery?.status === "IN_TRANSIT" ||
+        activeDelivery?.status === "ARRIVED_AT_DESTINATION" ||
+        activeDelivery?.status === "ABSENT_WAITING";
+
+    const canReportIncident =
+        activeDelivery?.status === "PICKED_UP" ||
+        activeDelivery?.status === "IN_TRANSIT" ||
+        activeDelivery?.status === "ARRIVED_AT_DESTINATION";
+
+    const canReportAbsent =
+        activeDelivery?.status === "ARRIVED_AT_DESTINATION";
     const customerLabel =
         activeDelivery?.order.customerName ||
         activeDelivery?.order.customerWhatsappId ||
@@ -515,6 +601,23 @@ export function RiderDashboard({
                     </Alert>
                 ) : null}
 
+                {/* Cooldown Alert */}
+                {profile.incidentBlockedUntil &&
+                new Date(profile.incidentBlockedUntil) > new Date() ? (
+                    <Alert variant="destructive" className="rounded-2xl shadow-md">
+                        <Clock3 className="h-4 w-4" />
+                        <AlertTitle>Bloqueio Temporário</AlertTitle>
+                        <AlertDescription>
+                            Você está temporariamente bloqueado para novas
+                            entregas até{" "}
+                            {new Intl.DateTimeFormat("pt-BR", {
+                                timeStyle: "short",
+                            }).format(new Date(profile.incidentBlockedUntil))}
+                            .
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
+
                 {/* Active Delivery Card */}
                 <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
                     <div className="bg-gradient-to-r from-slate-800 to-slate-700 p-4 text-white">
@@ -536,6 +639,36 @@ export function RiderDashboard({
                     </div>
 
                     {activeDelivery ? (
+                        <>
+                        {activeDelivery.status === "ABSENT_WAITING" && (
+                            <div className="bg-amber-50 p-4 border-b border-amber-100">
+                                <div className="flex items-center justify-between text-amber-800">
+                                    <div className="flex items-center gap-2">
+                                        <Clock3 className="h-5 w-5 animate-pulse" />
+                                        <span className="font-bold">Aguardando cliente no local</span>
+                                    </div>
+                                    <span className="text-xl font-mono font-bold">
+                                        {contingencies.formattedTimeLeft || "0:00"}
+                                    </span>
+                                </div>
+                                <p className="mt-1 text-xs text-amber-700">
+                                    O cliente foi notificado. Por favor, aguarde o tempo de segurança.
+                                </p>
+                            </div>
+                        )}
+
+                        {activeDelivery.status === "RETURNING_TO_MERCHANT" && (
+                            <div className="bg-red-50 p-4 border-b border-red-100">
+                                <div className="flex items-center gap-2 text-red-800">
+                                    <RefreshCw className="h-5 w-5" />
+                                    <span className="font-bold">Retornar para a loja</span>
+                                </div>
+                                <p className="mt-1 text-xs text-red-700">
+                                    Tempo de espera esgotado. Por favor, devolva o pacote na loja.
+                                </p>
+                            </div>
+                        )}
+
                         <DeliveryMap
                             pickupLat={activeDelivery.pickupLatitude}
                             pickupLng={activeDelivery.pickupLongitude}
@@ -547,6 +680,104 @@ export function RiderDashboard({
                                     : undefined
                             }
                         />
+
+                        <div className="p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="font-bold text-slate-900">{customerLabel}</h3>
+                                    <p className="text-sm text-slate-500">{activeDelivery.destinationAddress}</p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button size="icon" variant="outline" className="rounded-full">
+                                        <Phone className="h-4 w-4" />
+                                    </Button>
+                                    <Button size="icon" variant="outline" className="rounded-full">
+                                        <MessageSquare className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <div className="pt-2 flex flex-wrap gap-2">
+                                {canAccept && (
+                                    <Button
+                                        className="flex-1 bg-sky-600 hover:bg-sky-700"
+                                        onClick={() => runDeliveryAction("accept")}
+                                        disabled={!!runningAction}
+                                    >
+                                        {runningAction === "accept" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                                        Aceitar Corrida
+                                    </Button>
+                                )}
+
+                                {canPickUp && (
+                                    <Button
+                                        className="flex-1 bg-amber-600 hover:bg-amber-700"
+                                        onClick={() => runDeliveryAction("pick-up")}
+                                        disabled={!!runningAction}
+                                    >
+                                        {runningAction === "pick-up" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PackageCheck className="mr-2 h-4 w-4" />}
+                                        Coletar Pedido
+                                    </Button>
+                                )}
+
+                                {canComplete && (
+                                    <Button
+                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                                        onClick={() => runDeliveryAction("complete")}
+                                        disabled={!!runningAction || activeDelivery.status === "ABSENT_WAITING"}
+                                    >
+                                        {runningAction === "complete" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                                        Finalizar Entrega
+                                    </Button>
+                                )}
+
+                                {canReportAbsent && (
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button
+                                                variant="outline"
+                                                className="flex-1 border-amber-200 text-amber-700 hover:bg-amber-50"
+                                                disabled={!!runningAction}
+                                            >
+                                                <Clock3 className="mr-2 h-4 w-4" />
+                                                Cliente Ausente
+                                            </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle>Reportar Cliente Ausente?</AlertDialogTitle>
+                                                <AlertDialogDescription>
+                                                    Isso iniciará um cronômetro de 5 minutos. Você deve aguardar no local.
+                                                    O cliente será notificado via WhatsApp.
+                                                </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel>Voltar</AlertDialogCancel>
+                                                <AlertDialogAction
+                                                    className="bg-amber-600 hover:bg-amber-700"
+                                                    onClick={() => runDeliveryAction("absent")}
+                                                >
+                                                    Confirmar Ausência
+                                                </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+                                )}
+
+                                {canReportIncident && (
+                                    <Button
+                                        variant="ghost"
+                                        className="w-full text-slate-500 hover:text-red-600"
+                                        onClick={() => setIsIncidentDialogOpen(true)}
+                                        disabled={!!runningAction}
+                                    >
+                                        <AlertCircle className="mr-2 h-4 w-4" />
+                                        Reportar Problema
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                        </>
                     ) : (
                         <div className="p-6">
                             <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">
@@ -624,6 +855,63 @@ export function RiderDashboard({
                     </button>
                 </div>
             </nav>
+
+            {/* Incident Dialog */}
+            <Dialog open={isIncidentDialogOpen} onOpenChange={setIsIncidentDialogOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Reportar Incidente</DialogTitle>
+                        <DialogDescription>
+                            Use esta opção apenas para problemas graves (ex: pneu furado, acidente).
+                            A entrega será redistribuída e você ficará temporariamente offline.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="reason">Motivo</Label>
+                            <select
+                                id="reason"
+                                className="w-full rounded-md border border-slate-200 p-2"
+                                value={incidentReason}
+                                onChange={(e) => setIncidentReason(e.target.value)}
+                            >
+                                <option value="">Selecione um motivo</option>
+                                <option value="VEHICLE_ISSUE">Problema no veículo</option>
+                                <option value="ACCIDENT">Acidente</option>
+                                <option value="HEALTH_ISSUE">Problema de saúde</option>
+                                <option value="OTHER">Outro</option>
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="description">Descrição (Opcional)</Label>
+                            <Textarea
+                                id="description"
+                                placeholder="Descreva o que aconteceu..."
+                                value={incidentDescription}
+                                onChange={(e) => setIncidentDescription(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsIncidentDialogOpen(false)}>
+                            Cancelar
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            disabled={!incidentReason || !!runningAction}
+                            onClick={() => {
+                                setIsIncidentDialogOpen(false);
+                                void runDeliveryAction("incident", {
+                                    reason: incidentReason,
+                                    description: incidentDescription,
+                                });
+                            }}
+                        >
+                            Reportar e Sair
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </main>
     );
 }

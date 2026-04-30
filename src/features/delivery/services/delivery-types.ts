@@ -6,6 +6,9 @@ export type DeliveryStatus =
     | "ACCEPTED"
     | "PICKED_UP"
     | "IN_TRANSIT"
+    | "ARRIVED_AT_DESTINATION"
+    | "ABSENT_WAITING"
+    | "RETURNING_TO_MERCHANT"
     | "DELIVERED"
     | "CANCELED";
 
@@ -59,6 +62,7 @@ export type DeliveryRider = {
     currentLatitude: number | null;
     currentLongitude: number | null;
     lastLocationAt: string | null;
+    incidentBlockedUntil: string | null;
     createdAt: string;
     updatedAt: string;
     distanceKm?: number;
@@ -163,6 +167,7 @@ export type StoreDelivery = {
     riderSearchStartedAt: string | null;
     acceptedAt: string | null;
     pickedUpAt: string | null;
+    absentClientAt: string | null;
     deliveredAt: string | null;
     canceledAt: string | null;
     cancellationReason: string | null;
@@ -185,6 +190,9 @@ export type RiderLocationPayload = {
 export const DELIVERY_AVAILABLE_EVENT = "delivery:available";
 export const DELIVERY_ASSIGNED_EVENT = "delivery:assigned";
 export const DELIVERY_STATUS_CHANGED_EVENT = "delivery:status_changed";
+export const DELIVERY_CUSTOMER_RESPONDED_EVENT = "delivery:customer_responded";
+export const DELIVERY_RIDER_STALLED_WARNING_EVENT = "delivery:rider_stalled_warning";
+export const DELIVERY_RIDER_STALLED_UNASSIGNED_EVENT = "delivery:rider_stalled_unassigned";
 export const RIDER_NEW_AVAILABLE_DELIVERY_EVENT =
     DELIVERY_AVAILABLE_EVENT;
 export const RIDER_STATUS_CHANGED_EVENT = "rider:status_changed";
@@ -227,8 +235,50 @@ export type RiderStatusChangedEvent = {
     timestamp: string;
 };
 
+export type DeliveryCustomerRespondedEvent = {
+    deliveryId: string;
+    orderId: string;
+    storeId: string;
+    riderId: string;
+    customerWhatsappId: string;
+    message: string;
+    customerMessagePreview?: string;
+    timestamp: string;
+};
+
+export type DeliveryRiderStalledWarningEvent = {
+    deliveryId: string;
+    orderId: string;
+    storeId: string;
+    riderId: string;
+    distanceMeters: number;
+    elapsedMinutes: number;
+    thresholdMeters: number;
+    warningMinutes: number;
+    timestamp: string;
+};
+
+export type DeliveryRiderStalledUnassignedEvent = {
+    deliveryId: string;
+    orderId: string;
+    storeId: string;
+    riderId: string;
+    previousStatus: DeliveryStatus;
+    status: DeliveryStatus;
+    distanceMeters: number;
+    elapsedMinutes: number;
+    thresholdMeters: number;
+    unassignMinutes: number;
+    riderCooldownMinutes?: number;
+    riderBlockedUntil?: string;
+    timestamp: string;
+};
+
 export type DeliveryRealtimeEvent =
     | DeliveryAssignedEvent
     | DeliveryStatusChangedEvent
     | RiderNewAvailableDeliveryEvent
-    | RiderStatusChangedEvent;
+    | RiderStatusChangedEvent
+    | DeliveryCustomerRespondedEvent
+    | DeliveryRiderStalledWarningEvent
+    | DeliveryRiderStalledUnassignedEvent;

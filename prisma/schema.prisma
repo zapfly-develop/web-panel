@@ -38,27 +38,28 @@ enum TransactionStatus {
 }
 
 model User {
-  id                     String           @id @default(cuid())
-  name                   String?
-  email                  String?          @unique
-  phone                  String?          @unique
-  password               String?
-  termsAcceptedAt        DateTime?
-  assistantName          String?
-  businessProfile        BusinessProfile  @default(GROCERY)
-  closedMessage          String?          @db.Text
-  manualStoreClosed      Boolean          @default(false)
-  deliveryFeeCents       Int              @default(0)
-  dynamicFareBonusCents  Int              @default(0)
-  stagnatedTimeoutMinutes Int             @default(15)
-  storeAddress           String?          @db.Text
-  acceptedPaymentMethods PaymentMethod[]  @default([])
-  availableDeliveryTypes DeliveryType[]   @default([DELIVERY])
-  role                   UserRole         @default(CUSTOMER)
-  accessStatus           UserAccessStatus @default(ACTIVE)
-  aiMessageLimitOverride Int?
-  createdAt              DateTime         @default(now())
-  updatedAt              DateTime         @updatedAt
+  id                           String           @id @default(cuid())
+  name                         String?
+  email                        String?          @unique
+  phone                        String?          @unique
+  password                     String?
+  termsAcceptedAt              DateTime?
+  assistantName                String?
+  businessProfile              BusinessProfile  @default(GROCERY)
+  closedMessage                String?          @db.Text
+  manualStoreClosed            Boolean          @default(false)
+  deliveryFeeCents             Int              @default(0)
+  dynamicFareBonusCents        Int              @default(200)
+  stagnatedTimeoutMinutes      Int              @default(15)
+  riderIncidentCooldownMinutes Int              @default(30)
+  storeAddress                 String?          @db.Text
+  acceptedPaymentMethods       PaymentMethod[]  @default([])
+  availableDeliveryTypes       DeliveryType[]   @default([DELIVERY])
+  role                         UserRole         @default(CUSTOMER)
+  accessStatus                 UserAccessStatus @default(ACTIVE)
+  aiMessageLimitOverride       Int?
+  createdAt                    DateTime         @default(now())
+  updatedAt                    DateTime         @updatedAt
 
   bots                BotAccount[]
   products            Product[]
@@ -67,16 +68,17 @@ model User {
   transactions        Transaction[]
   whatsappInstances   WhatsappInstance[]
   whatsappCustomers   WhatsappCustomer[]
-  orders              Order[]             @relation("UserOrders")
+  orders              Order[]                      @relation("UserOrders")
   storeAddressDetails StoreAddress?
   whatsappHandovers   WhatsappHandover[]
-  operatingHours      OperatingHour[]     @relation("SubscriberOperatingHours")
-  tags                Tag[]               @relation("SubscriberTags")
-  productTags         ProductTags[]       @relation("SubscriberProductTags")
-  riderProfile        Rider?              @relation("RiderUser")
-  storeRiders         Rider[]             @relation("StoreOwnedRiders")
-  storeDeliveries     Delivery[]          @relation("StoreDeliveries")
-  deliveryPayouts     DeliveryPayout[]    @relation("StoreDeliveryPayouts")
+  operatingHours      OperatingHour[]              @relation("SubscriberOperatingHours")
+  tags                Tag[]                        @relation("SubscriberTags")
+  productTags         ProductTags[]                @relation("SubscriberProductTags")
+  riderProfile        Rider?                       @relation("RiderUser")
+  storeRiders         Rider[]                      @relation("StoreOwnedRiders")
+  storeDeliveries     Delivery[]                   @relation("StoreDeliveries")
+  deliveryPayouts     DeliveryPayout[]             @relation("StoreDeliveryPayouts")
+  safetyFundCoverages DeliverySafetyFundCoverage[] @relation("StoreSafetyFundCoverages")
   pushSubscriptions   PushSubscription[]
   wallet              Wallet?
   walletTransactions  WalletTransaction[]
@@ -244,6 +246,7 @@ enum WalletTransactionType {
 
 enum WalletTransactionCategory {
   DELIVERY_PAYOUT
+  DELIVERY_ESCROW
   WITHDRAWAL
   REFUND
 }
@@ -593,7 +596,12 @@ enum RiderVehicleType {
 
 enum DeliveryStatus {
   WAITING_RIDER
+  READY_FOR_PICKUP
+  INCIDENT_REPORTED
   DELIVERY_STAGNATED
+  ARRIVED_AT_DESTINATION
+  ABSENT_WAITING
+  RETURNING_TO_MERCHANT
   PENDING_ASSIGNMENT
   ASSIGNED
   ACCEPTED
@@ -601,6 +609,12 @@ enum DeliveryStatus {
   IN_TRANSIT
   DELIVERED
   CANCELED
+}
+
+enum DeliveryEventType {
+  CLIENT_ABSENT_REPORTED
+  RIDER_STALLED_WARNING
+  RIDER_STALLED_UNASSIGNED
 }
 
 enum DeliveryPaymentHandledBy {
@@ -625,6 +639,7 @@ enum DeliveryPayoutStatus {
 enum DeliveryPayoutSettlementType {
   STORE_DEBIT
   RIDER_RETAINED
+  FLOOVI_SAFETY_FUND
 }
 
 model Order {
@@ -657,72 +672,122 @@ model Order {
 }
 
 model Rider {
-  id                 String                  @id @default(cuid())
-  userId             String                  @unique
-  ownerUserId        String?
-  displayName        String?
-  documentNumber     String?                 @unique
-  cnhNumber          String?                 @unique
-  vehicleType        RiderVehicleType        @default(MOTORCYCLE)
-  vehiclePlate       String?
-  status             RiderStatus             @default(PENDING_REVIEW)
-  availabilityStatus RiderAvailabilityStatus @default(OFFLINE)
-  isStoreOwned       Boolean                 @default(false)
-  currentLatitude    Float?
-  currentLongitude   Float?
-  lastLocationAt     DateTime?
-  createdAt          DateTime                @default(now())
-  updatedAt          DateTime                @updatedAt
+  id                   String                  @id @default(cuid())
+  userId               String                  @unique
+  ownerUserId          String?
+  displayName          String?
+  documentNumber       String?                 @unique
+  cnhNumber            String?                 @unique
+  vehicleType          RiderVehicleType        @default(MOTORCYCLE)
+  vehiclePlate         String?
+  status               RiderStatus             @default(PENDING_REVIEW)
+  availabilityStatus   RiderAvailabilityStatus @default(OFFLINE)
+  isStoreOwned         Boolean                 @default(false)
+  currentLatitude      Float?
+  currentLongitude     Float?
+  lastLocationAt       DateTime?
+  incidentBlockedUntil DateTime?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
 
   user       User               @relation("RiderUser", fields: [userId], references: [id], onDelete: Cascade)
   ownerUser  User?              @relation("StoreOwnedRiders", fields: [ownerUserId], references: [id], onDelete: SetNull)
   deliveries Delivery[]
   locations  DeliveryLocation[]
+  incidents  DeliveryIncident[]
   payouts    DeliveryPayout[]
+  events     DeliveryEvent[]
 
   @@index([ownerUserId, status])
   @@index([availabilityStatus, status])
+  @@index([incidentBlockedUntil])
   @@index([vehiclePlate])
 }
 
 model Delivery {
-  id                         String                   @id @default(cuid())
-  ownerUserId                String
-  orderId                    String                   @unique
-  riderId                    String?
-  status                     DeliveryStatus           @default(WAITING_RIDER)
-  assignmentType             DeliveryAssignmentType   @default(MARKETPLACE)
-  paymentHandledBy           DeliveryPaymentHandledBy @default(RIDER)
-  orderTotalCollectedByStore Boolean                  @default(false)
-  distanceMeters             Int?
-  quotedPriceCents           Int                      @default(0)
-  riderPayoutCents           Int                      @default(0)
-  currency                   String                   @default("BRL")
-  pickupAddress              String?                  @db.Text
-  pickupLatitude             Float?
-  pickupLongitude            Float?
-  destinationAddress         String                   @db.Text
-  destinationLatitude        Float?
-  destinationLongitude       Float?
-  deliveryBonusApplied       Boolean                  @default(false)
-  riderSearchStartedAt       DateTime?
-  acceptedAt                 DateTime?
-  pickedUpAt                 DateTime?
-  deliveredAt                DateTime?
-  canceledAt                 DateTime?
-  cancellationReason         String?                  @db.Text
-  createdAt                  DateTime                 @default(now())
-  updatedAt                  DateTime                 @updatedAt
+  id                             String                   @id @default(cuid())
+  ownerUserId                    String
+  orderId                        String                   @unique
+  riderId                        String?
+  status                         DeliveryStatus           @default(WAITING_RIDER)
+  assignmentType                 DeliveryAssignmentType   @default(MARKETPLACE)
+  paymentHandledBy               DeliveryPaymentHandledBy @default(RIDER)
+  orderTotalCollectedByStore     Boolean                  @default(false)
+  distanceMeters                 Int?
+  quotedPriceCents               Int                      @default(0)
+  riderPayoutCents               Int                      @default(0)
+  isHighPriority                 Boolean                  @default(false) @map("is_high_priority")
+  deliveryBonusApplied           Boolean                  @default(false)
+  bonusValueCents                Int                      @default(0)
+  currency                       String                   @default("BRL")
+  pickupAddress                  String?                  @db.Text
+  pickupLatitude                 Float?
+  pickupLongitude                Float?
+  destinationAddress             String                   @db.Text
+  destinationLatitude            Float?
+  destinationLongitude           Float?
+  acceptedAt                     DateTime?
+  acceptedLatitude               Float?                   @map("accepted_latitude")
+  acceptedLongitude              Float?                   @map("accepted_longitude")
+  pickedUpAt                     DateTime?
+  absentClientAt                 DateTime?                @map("absent_client_at")
+  deliveryFeeEscrowedAt          DateTime?                @map("delivery_fee_escrowed_at")
+  deliveryFeeEscrowCents         Int                      @default(0) @map("delivery_fee_escrow_cents")
+  deliveryFeeEscrowTransactionId String?                  @unique @map("delivery_fee_escrow_transaction_id")
+  deliveredAt                    DateTime?
+  canceledAt                     DateTime?
+  cancellationReason             String?                  @db.Text
+  riderSearchStartedAt           DateTime                 @default(now()) @map("rider_search_started_at")
+  createdAt                      DateTime                 @default(now())
+  updatedAt                      DateTime                 @updatedAt
 
-  ownerUser User               @relation("StoreDeliveries", fields: [ownerUserId], references: [id], onDelete: Cascade)
-  order     Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  rider     Rider?             @relation(fields: [riderId], references: [id], onDelete: SetNull)
-  locations DeliveryLocation[]
-  payout    DeliveryPayout?
+  ownerUser          User                        @relation("StoreDeliveries", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  order              Order                       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  rider              Rider?                      @relation(fields: [riderId], references: [id], onDelete: SetNull)
+  locations          DeliveryLocation[]
+  incidents          DeliveryIncident[]
+  events             DeliveryEvent[]
+  payout             DeliveryPayout?
+  safetyFundCoverage DeliverySafetyFundCoverage?
 
   @@index([ownerUserId, status, createdAt])
   @@index([riderId, status])
   @@index([assignmentType, status])
+  @@index([status, isHighPriority, updatedAt])
+  @@index([status, createdAt])
+  @@index([status, updatedAt])
+}
+
+model DeliveryIncident {
+  id          String   @id @default(cuid())
+  deliveryId  String
+  riderId     String
+  reason      String   @db.Text
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  rider    Rider    @relation(fields: [riderId], references: [id], onDelete: Restrict)
+
+  @@index([deliveryId, createdAt])
+  @@index([riderId, createdAt])
+}
+
+model DeliveryEvent {
+  id          String            @id @default(cuid())
+  deliveryId  String
+  riderId     String?
+  eventType   DeliveryEventType
+  description String?           @db.Text
+  metadata    Json?
+  createdAt   DateTime          @default(now())
+
+  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  rider    Rider?   @relation(fields: [riderId], references: [id], onDelete: SetNull)
+
+  @@index([deliveryId, createdAt])
+  @@index([riderId, createdAt])
+  @@index([eventType, createdAt])
 }
 
 model DeliveryLocation {
@@ -766,6 +831,22 @@ model DeliveryPayout {
 
   @@index([riderId, status, createdAt])
   @@index([ownerUserId, status, createdAt])
+}
+
+model DeliverySafetyFundCoverage {
+  id            String   @id @default(cuid())
+  ownerUserId   String
+  deliveryId    String   @unique
+  coverageMonth String
+  amountCents   Int
+  currency      String   @default("BRL")
+  createdAt     DateTime @default(now())
+
+  ownerUser User     @relation("StoreSafetyFundCoverages", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  delivery  Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerUserId, coverageMonth])
+  @@index([ownerUserId, createdAt])
 }
 
 model OrderItem {
