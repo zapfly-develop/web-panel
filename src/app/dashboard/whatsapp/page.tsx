@@ -372,20 +372,32 @@ export default async function DashboardWhatsappPage() {
                     </CardHeader>
                     <CardContent>
                         <Tabs defaultValue="connection" className="gap-4">
-                            <TabsList className="h-auto w-full justify-start gap-1 rounded-xl bg-slate-100 p-1 flex-wrap">
-                                <TabsTrigger value="connection">
+                            <TabsList className="h-auto w-full justify-start gap-1.5 rounded-2xl bg-slate-100/80 p-1.5 flex-wrap">
+                                <TabsTrigger
+                                    value="connection"
+                                    className="h-9 flex-none rounded-xl px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                                >
                                     <PlugZap className="h-4 w-4" />
                                     Conexão
                                 </TabsTrigger>
-                                <TabsTrigger value="store">
+                                <TabsTrigger
+                                    value="store"
+                                    className="h-9 flex-none rounded-xl px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                                >
                                     <Store className="h-4 w-4" />
                                     Loja & Endereço
                                 </TabsTrigger>
-                                <TabsTrigger value="logistics">
+                                <TabsTrigger
+                                    value="logistics"
+                                    className="h-9 flex-none rounded-xl px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                                >
                                     <Settings2 className="h-4 w-4" />
                                     Logística & Pagamentos
                                 </TabsTrigger>
-                                <TabsTrigger value="hours">
+                                <TabsTrigger
+                                    value="hours"
+                                    className="h-9 flex-none rounded-xl px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                                >
                                     <Clock3 className="h-4 w-4" />
                                     Horários
                                 </TabsTrigger>
