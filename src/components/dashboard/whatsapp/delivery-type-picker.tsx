@@ -37,7 +37,7 @@ export default function DeliveryTypePicker({
     }
 
     return (
-        <div className="grid items-stretch gap-3 md:grid-cols-2">
+        <div className="grid items-stretch gap-3 grid-cols-2">
             {DELIVERY_TYPE_OPTIONS.map((option) => {
                 const Icon = DELIVERY_TYPE_ICONS[option.value];
                 const selected = value.includes(option.value);

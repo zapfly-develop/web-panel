@@ -17,10 +17,7 @@ type PaymentMethodPickerProps = {
     disabled?: boolean;
 };
 
-const PAYMENT_METHOD_ICONS: Record<
-    PaymentMethod,
-    LucideIcon
-> = {
+const PAYMENT_METHOD_ICONS: Record<PaymentMethod, LucideIcon> = {
     PIX_ONLINE: QrCode,
     PIX_DELIVERY: Wallet,
     CARD_DELIVERY: CreditCard,
@@ -48,7 +45,7 @@ export default function PaymentMethodPicker({
     }
 
     return (
-        <div className="grid items-stretch gap-3 md:grid-cols-2">
+        <div className="grid items-stretch gap-3 grid-cols-2">
             {PAYMENT_METHOD_OPTIONS.map((option) => {
                 const Icon = PAYMENT_METHOD_ICONS[option.value];
                 const selected = value.includes(option.value);

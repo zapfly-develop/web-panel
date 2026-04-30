@@ -10,6 +10,7 @@ import {
     Printer,
     ReceiptText,
     UserRound,
+    Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -51,7 +52,10 @@ export function OrderCard({
     onOpenDetails,
     onPrint,
 }: OrderCardProps) {
-    const slaLevel = getOrderSlaLevel(order, now);
+    const slaLevel =
+        delivery?.status === "DELIVERY_STAGNATED"
+            ? "critical"
+            : getOrderSlaLevel(order, now);
     const canCreateDelivery = order.status === "PREPARING" && !delivery;
     const canAssignRider =
         delivery?.status === "WAITING_RIDER" ||
@@ -66,6 +70,8 @@ export function OrderCard({
                 slaLevel === "warning" && "border-amber-300",
                 slaLevel === "critical" && "border-rose-300",
                 slaLevel === "normal" && "border-slate-200",
+                delivery?.status === "DELIVERY_STAGNATED" &&
+                    "border-rose-500 ring-1 ring-rose-500 bg-rose-50/30",
             )}
         >
             <div className="flex items-start justify-between gap-3">
@@ -81,7 +87,10 @@ export function OrderCard({
                     </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
-                    <OrderStatusBadge status={order.status} />
+                    <OrderStatusBadge
+                        status={order.status}
+                        deliveryStatus={delivery?.status}
+                    />
                     <OrderSlaIndicator order={order} now={now} />
                 </div>
             </div>
@@ -105,6 +114,12 @@ export function OrderCard({
                         Entrega criada
                     </span>
                 ) : null}
+                {delivery?.deliveryBonusApplied && (
+                    <span className="flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 animate-pulse">
+                        <Zap className="h-3 w-3 fill-amber-500" />
+                        Tarifa Dinâmica Ativa
+                    </span>
+                )}
             </div>
 
             {rider ? <OrderRiderSummary rider={rider} /> : null}
@@ -112,11 +127,18 @@ export function OrderCard({
             <div className="mt-4 flex items-end justify-between gap-3 border-t border-slate-100 pt-3">
                 <div>
                     <p className="text-xs font-medium uppercase text-slate-500">
-                        Total
+                        {delivery?.deliveryBonusApplied ? "Total c/ Bônus" : "Total"}
                     </p>
-                    <p className="text-lg font-bold text-slate-950">
-                        {formatMoney(order.totalCents, order.currency)}
-                    </p>
+                    <div className="flex items-baseline gap-1.5">
+                        <p className="text-lg font-bold text-slate-950">
+                            {formatMoney(order.totalCents, order.currency)}
+                        </p>
+                        {delivery?.deliveryBonusApplied && (
+                            <p className="text-[10px] font-medium text-amber-600">
+                                (Rider: {formatMoney(delivery.riderPayoutCents)})
+                            </p>
+                        )}
+                    </div>
                 </div>
 
                 <div className="flex flex-wrap justify-end gap-2">

@@ -90,13 +90,13 @@ export function OrdersFilterBar({
 }: OrdersFilterBarProps) {
     return (
         <div className="rounded-md border border-slate-200 bg-white p-3 shadow-sm">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-slate-200 px-3">
                     <Search className="h-4 w-4 shrink-0 text-slate-400" />
                     <Input
                         value={query}
                         onChange={(event) => onQueryChange(event.target.value)}
-                        placeholder="Buscar cliente, ID, endereco ou item"
+                        placeholder="Buscar cliente, ID, endereço ou item"
                         className="h-9 border-0 px-0 shadow-none focus-visible:ring-0"
                     />
                 </div>
@@ -141,7 +141,7 @@ export function OrdersFilterBar({
                             onStatusFilterChange(value as OrderStatusFilter)
                         }
                     >
-                        <SelectTrigger size="sm" className="w-36">
+                        <SelectTrigger size="sm" className="w-full sm:w-36">
                             <ListFilter className="h-4 w-4" />
                             <SelectValue />
                         </SelectTrigger>
@@ -163,7 +163,7 @@ export function OrdersFilterBar({
                             onPaymentFilterChange(value as OrderPaymentFilter)
                         }
                     >
-                        <SelectTrigger size="sm" className="w-40">
+                        <SelectTrigger size="sm" className="w-full sm:w-40">
                             <SelectValue placeholder="Pagamento" />
                         </SelectTrigger>
                         <SelectContent>
@@ -185,7 +185,7 @@ export function OrdersFilterBar({
                             onTimeFilterChange(value as OrderTimeFilter)
                         }
                     >
-                        <SelectTrigger size="sm" className="w-28">
+                        <SelectTrigger size="sm" className="w-full sm:w-28">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
