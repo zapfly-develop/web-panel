@@ -30,6 +30,22 @@ const DELIVERY_STATUS_COPY: Record<
         label: "Em rota",
         className: "border-cyan-200 bg-cyan-50 text-cyan-700",
     },
+    ARRIVED_AT_DESTINATION: {
+        label: "No local",
+        className: "border-indigo-200 bg-indigo-50 text-indigo-700",
+    },
+    ABSENT_WAITING: {
+        label: "Cliente ausente",
+        className: "border-amber-200 bg-amber-50 text-amber-700",
+    },
+    RETURNING_TO_MERCHANT: {
+        label: "Retornando",
+        className: "border-orange-200 bg-orange-50 text-orange-700",
+    },
+    DELIVERY_STAGNATED: {
+        label: "Estagnada",
+        className: "border-red-200 bg-red-50 text-red-700",
+    },
     DELIVERED: {
         label: "Entregue",
         className: "border-emerald-200 bg-emerald-50 text-emerald-700",

@@ -52,6 +52,36 @@ export async function getStoreDeliveryById(
     });
 }
 
+export async function reportRiderIncident(
+    userId: string,
+    deliveryId: string,
+    payload: { reason: string; description?: string },
+): Promise<StoreDelivery> {
+    return fetchNestApiJson<StoreDelivery>(
+        `/delivery/riders/me/deliveries/${deliveryId}/incidents`,
+        {
+            method: "POST",
+            headers: buildJsonTenantHeaders(userId),
+            body: JSON.stringify(payload),
+        },
+    );
+}
+
+export async function reportClientAbsent(
+    userId: string,
+    deliveryId: string,
+    payload?: { description?: string },
+): Promise<StoreDelivery> {
+    return fetchNestApiJson<StoreDelivery>(
+        `/delivery/riders/me/deliveries/${deliveryId}/client-absent`,
+        {
+            method: "POST",
+            headers: buildJsonTenantHeaders(userId),
+            body: JSON.stringify(payload || {}),
+        },
+    );
+}
+
 export async function createStoreDelivery(
     userId: string,
     orderId: string,
