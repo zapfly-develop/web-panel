@@ -37,6 +37,7 @@ type OrdersTableViewProps = {
     now: Date;
     creatingDeliveryOrderId: string | null;
     onCreateDelivery: (order: StoreOrder) => void;
+    onAssignRider: (delivery: StoreDelivery) => void;
     onOpenDetails: (order: StoreOrder) => void;
     onPrint: (order: StoreOrder) => void;
 };
@@ -47,6 +48,7 @@ export function OrdersTableView({
     now,
     creatingDeliveryOrderId,
     onCreateDelivery,
+    onAssignRider,
     onOpenDetails,
     onPrint,
 }: OrdersTableViewProps) {
@@ -185,14 +187,16 @@ export function OrdersTableView({
                                             </Button>
                                         ) : canAssignRider ? (
                                             <Button
-                                                asChild
+                                                type="button"
                                                 size="icon-sm"
                                                 variant="outline"
                                                 title="Atribuir rider"
+                                                onClick={() =>
+                                                    delivery &&
+                                                    onAssignRider(delivery)
+                                                }
                                             >
-                                                <Link href="/dashboard/delivery">
-                                                    <Bike className="h-4 w-4" />
-                                                </Link>
+                                                <Bike className="h-4 w-4" />
                                             </Button>
                                         ) : delivery ? (
                                             <Button

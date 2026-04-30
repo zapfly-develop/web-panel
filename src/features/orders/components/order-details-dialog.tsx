@@ -10,6 +10,7 @@ import {
     UserRound,
     Zap,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
     Dialog,
     DialogContent,
@@ -34,6 +35,7 @@ type OrderDetailsDialogProps = {
     delivery: StoreDelivery | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    onAssignRider?: (delivery: StoreDelivery) => void;
 };
 
 export function OrderDetailsDialog({
@@ -41,6 +43,7 @@ export function OrderDetailsDialog({
     delivery,
     open,
     onOpenChange,
+    onAssignRider,
 }: OrderDetailsDialogProps) {
     const [now, setNow] = useState(new Date());
 
@@ -120,12 +123,33 @@ export function OrderDetailsDialog({
                                     <p className="text-[10px] font-semibold uppercase text-slate-400">
                                         Status da Entrega
                                     </p>
-                                    <p className="text-sm font-medium text-slate-900">
-                                        {delivery.status ===
-                                        "DELIVERY_STAGNATED"
-                                            ? "⚠️ Estagnado (Sem entregadores)"
-                                            : delivery.status}
-                                    </p>
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-sm font-medium text-slate-900">
+                                            {delivery.status ===
+                                            "DELIVERY_STAGNATED"
+                                                ? "⚠️ Estagnado (Sem entregadores)"
+                                                : delivery.status}
+                                        </p>
+                                        {(delivery.status ===
+                                            "WAITING_RIDER" ||
+                                            delivery.status ===
+                                                "PENDING_ASSIGNMENT" ||
+                                            delivery.status ===
+                                                "DELIVERY_STAGNATED") &&
+                                            onAssignRider && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        onAssignRider(delivery)
+                                                    }
+                                                    className="h-7 gap-1 px-2 text-[10px] font-bold uppercase text-sky-600 hover:bg-sky-50 hover:text-sky-700"
+                                                >
+                                                    <Bike className="h-3 w-3" />
+                                                    Atribuir
+                                                </Button>
+                                            )}
+                                    </div>
                                 </div>
                                 <div className="space-y-2">
                                     <p className="text-[10px] font-semibold uppercase text-slate-400">

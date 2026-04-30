@@ -11,6 +11,7 @@ type OrdersCardViewProps = {
     now: Date;
     creatingDeliveryOrderId: string | null;
     onCreateDelivery: (order: StoreOrder) => void;
+    onAssignRider: (delivery: StoreDelivery) => void;
     onOpenDetails: (order: StoreOrder) => void;
     onPrint: (order: StoreOrder) => void;
 };
@@ -21,6 +22,7 @@ export function OrdersCardView({
     now,
     creatingDeliveryOrderId,
     onCreateDelivery,
+    onAssignRider,
     onOpenDetails,
     onPrint,
 }: OrdersCardViewProps) {
@@ -34,6 +36,7 @@ export function OrdersCardView({
                     now={now}
                     isCreatingDelivery={creatingDeliveryOrderId === order.id}
                     onCreateDelivery={onCreateDelivery}
+                    onAssignRider={onAssignRider}
                     onOpenDetails={onOpenDetails}
                     onPrint={onPrint}
                 />

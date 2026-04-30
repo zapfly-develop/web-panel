@@ -38,6 +38,7 @@ type OrderCardProps = {
     compact?: boolean;
     isCreatingDelivery: boolean;
     onCreateDelivery: (order: StoreOrder) => void;
+    onAssignRider: (delivery: StoreDelivery) => void;
     onOpenDetails: (order: StoreOrder) => void;
     onPrint: (order: StoreOrder) => void;
 };
@@ -49,6 +50,7 @@ export function OrderCard({
     compact = false,
     isCreatingDelivery,
     onCreateDelivery,
+    onAssignRider,
     onOpenDetails,
     onPrint,
 }: OrderCardProps) {
@@ -176,11 +178,14 @@ export function OrderCard({
                             Chamar rider
                         </Button>
                     ) : canAssignRider ? (
-                        <Button asChild size="sm" variant="outline">
-                            <Link href="/dashboard/delivery">
-                                <Bike className="h-4 w-4" />
-                                Atribuir
-                            </Link>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => delivery && onAssignRider(delivery)}
+                        >
+                            <Bike className="h-4 w-4" />
+                            Atribuir
                         </Button>
                     ) : delivery ? (
                         <Button asChild size="sm" variant="outline">
