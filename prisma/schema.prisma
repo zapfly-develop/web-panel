@@ -38,27 +38,28 @@ enum TransactionStatus {
 }
 
 model User {
-  id                     String           @id @default(cuid())
-  name                   String?
-  email                  String?          @unique
-  phone                  String?          @unique
-  password               String?
-  termsAcceptedAt        DateTime?
-  assistantName          String?
-  businessProfile        BusinessProfile  @default(GROCERY)
-  closedMessage          String?          @db.Text
-  manualStoreClosed      Boolean          @default(false)
-  deliveryFeeCents       Int              @default(0)
-  dynamicFareBonusCents  Int              @default(0)
-  stagnatedTimeoutMinutes Int             @default(15)
-  storeAddress           String?          @db.Text
-  acceptedPaymentMethods PaymentMethod[]  @default([])
-  availableDeliveryTypes DeliveryType[]   @default([DELIVERY])
-  role                   UserRole         @default(CUSTOMER)
-  accessStatus           UserAccessStatus @default(ACTIVE)
-  aiMessageLimitOverride Int?
-  createdAt              DateTime         @default(now())
-  updatedAt              DateTime         @updatedAt
+  id                           String           @id @default(cuid())
+  name                         String?
+  email                        String?          @unique
+  phone                        String?          @unique
+  password                     String?
+  termsAcceptedAt              DateTime?
+  assistantName                String?
+  businessProfile              BusinessProfile  @default(GROCERY)
+  closedMessage                String?          @db.Text
+  manualStoreClosed            Boolean          @default(false)
+  deliveryFeeCents             Int              @default(0)
+  dynamicFareBonusCents        Int              @default(200)
+  stagnatedTimeoutMinutes      Int              @default(15)
+  riderIncidentCooldownMinutes Int              @default(30)
+  storeAddress                 String?          @db.Text
+  acceptedPaymentMethods       PaymentMethod[]  @default([])
+  availableDeliveryTypes       DeliveryType[]   @default([DELIVERY])
+  role                         UserRole         @default(CUSTOMER)
+  accessStatus                 UserAccessStatus @default(ACTIVE)
+  aiMessageLimitOverride       Int?
+  createdAt                    DateTime         @default(now())
+  updatedAt                    DateTime         @updatedAt
 
   bots                BotAccount[]
   products            Product[]
@@ -593,6 +594,8 @@ enum RiderVehicleType {
 
 enum DeliveryStatus {
   WAITING_RIDER
+  READY_FOR_PICKUP
+  INCIDENT_REPORTED
   DELIVERY_STAGNATED
   PENDING_ASSIGNMENT
   ASSIGNED
@@ -657,31 +660,34 @@ model Order {
 }
 
 model Rider {
-  id                 String                  @id @default(cuid())
-  userId             String                  @unique
-  ownerUserId        String?
-  displayName        String?
-  documentNumber     String?                 @unique
-  cnhNumber          String?                 @unique
-  vehicleType        RiderVehicleType        @default(MOTORCYCLE)
-  vehiclePlate       String?
-  status             RiderStatus             @default(PENDING_REVIEW)
-  availabilityStatus RiderAvailabilityStatus @default(OFFLINE)
-  isStoreOwned       Boolean                 @default(false)
-  currentLatitude    Float?
-  currentLongitude   Float?
-  lastLocationAt     DateTime?
-  createdAt          DateTime                @default(now())
-  updatedAt          DateTime                @updatedAt
+  id                   String                  @id @default(cuid())
+  userId               String                  @unique
+  ownerUserId          String?
+  displayName          String?
+  documentNumber       String?                 @unique
+  cnhNumber            String?                 @unique
+  vehicleType          RiderVehicleType        @default(MOTORCYCLE)
+  vehiclePlate         String?
+  status               RiderStatus             @default(PENDING_REVIEW)
+  availabilityStatus   RiderAvailabilityStatus @default(OFFLINE)
+  isStoreOwned         Boolean                 @default(false)
+  currentLatitude      Float?
+  currentLongitude     Float?
+  lastLocationAt       DateTime?
+  incidentBlockedUntil DateTime?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
 
   user       User               @relation("RiderUser", fields: [userId], references: [id], onDelete: Cascade)
   ownerUser  User?              @relation("StoreOwnedRiders", fields: [ownerUserId], references: [id], onDelete: SetNull)
   deliveries Delivery[]
   locations  DeliveryLocation[]
+  incidents  DeliveryIncident[]
   payouts    DeliveryPayout[]
 
   @@index([ownerUserId, status])
   @@index([availabilityStatus, status])
+  @@index([incidentBlockedUntil])
   @@index([vehiclePlate])
 }
 
@@ -697,6 +703,9 @@ model Delivery {
   distanceMeters             Int?
   quotedPriceCents           Int                      @default(0)
   riderPayoutCents           Int                      @default(0)
+  isHighPriority             Boolean                  @default(false) @map("is_high_priority")
+  deliveryBonusApplied       Boolean                  @default(false)
+  bonusValueCents            Int                      @default(0)
   currency                   String                   @default("BRL")
   pickupAddress              String?                  @db.Text
   pickupLatitude             Float?
@@ -704,13 +713,12 @@ model Delivery {
   destinationAddress         String                   @db.Text
   destinationLatitude        Float?
   destinationLongitude       Float?
-  deliveryBonusApplied       Boolean                  @default(false)
-  riderSearchStartedAt       DateTime?
   acceptedAt                 DateTime?
   pickedUpAt                 DateTime?
   deliveredAt                DateTime?
   canceledAt                 DateTime?
   cancellationReason         String?                  @db.Text
+  riderSearchStartedAt       DateTime                 @default(now()) @map("rider_search_started_at")
   createdAt                  DateTime                 @default(now())
   updatedAt                  DateTime                 @updatedAt
 
@@ -718,11 +726,30 @@ model Delivery {
   order     Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
   rider     Rider?             @relation(fields: [riderId], references: [id], onDelete: SetNull)
   locations DeliveryLocation[]
+  incidents DeliveryIncident[]
   payout    DeliveryPayout?
 
   @@index([ownerUserId, status, createdAt])
   @@index([riderId, status])
   @@index([assignmentType, status])
+  @@index([status, isHighPriority, updatedAt])
+  @@index([status, createdAt])
+  @@index([status, updatedAt])
+}
+
+model DeliveryIncident {
+  id          String   @id @default(cuid())
+  deliveryId  String
+  riderId     String
+  reason      String   @db.Text
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  rider    Rider    @relation(fields: [riderId], references: [id], onDelete: Restrict)
+
+  @@index([deliveryId, createdAt])
+  @@index([riderId, createdAt])
 }
 
 model DeliveryLocation {
