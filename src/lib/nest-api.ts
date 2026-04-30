@@ -38,10 +38,10 @@ function extractErrorMessage(payload: unknown, status: number): string {
 }
 
 export function getNestApiBaseUrl(): string {
-    const baseUrl = process.env.NEST_API_URL;
+    const baseUrl = process.env.NEXT_PUBLIC_NEST_API_URL;
 
     if (!baseUrl) {
-        throw new Error("NEST_API_URL is not configured");
+        throw new Error("NEXT_PUBLIC_NEST_API_URL is not configured");
     }
 
     return normalizeBaseUrl(baseUrl);
