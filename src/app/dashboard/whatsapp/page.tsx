@@ -117,6 +117,8 @@ export default async function DashboardWhatsappPage() {
             closedMessage: true,
             manualStoreClosed: true,
             deliveryFeeCents: true,
+            dynamicFareBonusCents: true,
+            stagnatedTimeoutMinutes: true,
             storeAddress: true,
             acceptedPaymentMethods: true,
             availableDeliveryTypes: true,
@@ -172,6 +174,8 @@ export default async function DashboardWhatsappPage() {
         null;
     const manualStoreClosed = userSettings?.manualStoreClosed ?? false;
     const deliveryFeeCents = userSettings?.deliveryFeeCents ?? 0;
+    const dynamicFareBonusCents = userSettings?.dynamicFareBonusCents ?? 0;
+    const stagnatedTimeoutMinutes = userSettings?.stagnatedTimeoutMinutes ?? 15;
     const deliveryFeeLabel =
         deliveryFeeCents > 0 ? formatCurrency(deliveryFeeCents) : "Sem taxa";
     const assistantName = userSettings?.assistantName?.trim() || "Clara";
@@ -502,6 +506,10 @@ export default async function DashboardWhatsappPage() {
                                     defaultDeliveryFee={formatCurrencyInput(
                                         deliveryFeeCents,
                                     )}
+                                    defaultDynamicFareBonus={formatCurrencyInput(
+                                        dynamicFareBonusCents,
+                                    )}
+                                    defaultStagnatedTimeout={stagnatedTimeoutMinutes}
                                     defaultAcceptedPaymentMethods={
                                         acceptedPaymentMethods
                                     }

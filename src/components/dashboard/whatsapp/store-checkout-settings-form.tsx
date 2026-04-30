@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { DeliveryType, PaymentMethod } from "@prisma/client";
-import { MapPinned, ReceiptText } from "lucide-react";
+import { MapPinned, ReceiptText, ShieldAlert, Timer } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,8 @@ import {
 type StoreCheckoutSettingsFormProps = {
     defaultStoreAddress: string;
     defaultDeliveryFee: string;
+    defaultDynamicFareBonus: string;
+    defaultStagnatedTimeout: number;
     defaultAcceptedPaymentMethods: PaymentMethod[];
     defaultAvailableDeliveryTypes: DeliveryType[];
     action: (formData: FormData) => Promise<void>;
@@ -27,6 +29,8 @@ type StoreCheckoutSettingsFormProps = {
 export default function StoreCheckoutSettingsForm({
     defaultStoreAddress,
     defaultDeliveryFee,
+    defaultDynamicFareBonus,
+    defaultStagnatedTimeout,
     defaultAcceptedPaymentMethods,
     defaultAvailableDeliveryTypes,
     action,
@@ -34,6 +38,12 @@ export default function StoreCheckoutSettingsForm({
     const router = useRouter();
     const [storeAddress, setStoreAddress] = useState(defaultStoreAddress);
     const [deliveryFee, setDeliveryFee] = useState(defaultDeliveryFee);
+    const [dynamicFareBonus, setDynamicFareBonus] = useState(
+        defaultDynamicFareBonus,
+    );
+    const [stagnatedTimeout, setStagnatedTimeout] = useState(
+        defaultStagnatedTimeout.toString(),
+    );
     const [acceptedPaymentMethods, setAcceptedPaymentMethods] = useState(
         defaultAcceptedPaymentMethods,
     );
@@ -67,6 +77,8 @@ export default function StoreCheckoutSettingsForm({
                 const formData = new FormData();
                 formData.set("storeAddress", storeAddress);
                 formData.set("deliveryFee", deliveryFee);
+                formData.set("dynamicFareBonus", dynamicFareBonus);
+                formData.set("stagnatedTimeout", stagnatedTimeout);
 
                 for (const paymentMethod of acceptedPaymentMethods) {
                     formData.append("acceptedPaymentMethods", paymentMethod);
@@ -176,6 +188,73 @@ export default function StoreCheckoutSettingsForm({
                             onChange={setAvailableDeliveryTypes}
                             disabled={isPending}
                         />
+                    </div>
+                </div>
+
+                {/* Contingência de Entregadores */}
+                <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-center gap-2.5">
+                        <div className="rounded-lg bg-white p-1.5 text-primary shadow-sm">
+                            <ShieldAlert className="h-3.5 w-3.5" />
+                        </div>
+                        <Label className="text-sm font-semibold">
+                            Contingência de Entregadores
+                        </Label>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                            <Label
+                                htmlFor="dynamicFareBonus"
+                                className="text-xs font-medium"
+                            >
+                                Bônus de Tarifa Dinâmica
+                            </Label>
+                            <Input
+                                id="dynamicFareBonus"
+                                name="dynamicFareBonus"
+                                className="bg-white"
+                                inputMode="decimal"
+                                value={dynamicFareBonus}
+                                onChange={(event) =>
+                                    setDynamicFareBonus(event.target.value)
+                                }
+                                placeholder="Ex: 2,00"
+                                disabled={isPending}
+                            />
+                            <p className="text-[10px] leading-relaxed text-slate-500">
+                                Valor somado ao repasse do entregador após 10
+                                minutos sem aceite.
+                            </p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-1.5">
+                                <Timer className="h-3 w-3 text-slate-400" />
+                                <Label
+                                    htmlFor="stagnatedTimeout"
+                                    className="text-xs font-medium"
+                                >
+                                    Tempo para Estagnação (minutos)
+                                </Label>
+                            </div>
+                            <Input
+                                id="stagnatedTimeout"
+                                name="stagnatedTimeout"
+                                type="number"
+                                className="bg-white"
+                                value={stagnatedTimeout}
+                                onChange={(event) =>
+                                    setStagnatedTimeout(event.target.value)
+                                }
+                                placeholder="Padrão: 15"
+                                disabled={isPending}
+                            />
+                            <p className="text-[10px] leading-relaxed text-slate-500">
+                                Tempo limite para mudar o pedido para
+                                &apos;Estagnado&apos; e alertar a loja.
+                            </p>
+                        </div>
                     </div>
                 </div>
 

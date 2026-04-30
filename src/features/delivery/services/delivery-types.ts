@@ -1,5 +1,6 @@
 export type DeliveryStatus =
     | "WAITING_RIDER"
+    | "DELIVERY_STAGNATED"
     | "PENDING_ASSIGNMENT"
     | "ASSIGNED"
     | "ACCEPTED"
@@ -158,6 +159,8 @@ export type StoreDelivery = {
     destinationAddress: string;
     destinationLatitude: number | null;
     destinationLongitude: number | null;
+    deliveryBonusApplied: boolean;
+    riderSearchStartedAt: string | null;
     acceptedAt: string | null;
     pickedUpAt: string | null;
     deliveredAt: string | null;
