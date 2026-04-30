@@ -49,6 +49,8 @@ model User {
   closedMessage          String?          @db.Text
   manualStoreClosed      Boolean          @default(false)
   deliveryFeeCents       Int              @default(0)
+  dynamicFareBonusCents  Int              @default(0)
+  stagnatedTimeoutMinutes Int             @default(15)
   storeAddress           String?          @db.Text
   acceptedPaymentMethods PaymentMethod[]  @default([])
   availableDeliveryTypes DeliveryType[]   @default([DELIVERY])
@@ -591,6 +593,7 @@ enum RiderVehicleType {
 
 enum DeliveryStatus {
   WAITING_RIDER
+  DELIVERY_STAGNATED
   PENDING_ASSIGNMENT
   ASSIGNED
   ACCEPTED
@@ -701,6 +704,8 @@ model Delivery {
   destinationAddress         String                   @db.Text
   destinationLatitude        Float?
   destinationLongitude       Float?
+  deliveryBonusApplied       Boolean                  @default(false)
+  riderSearchStartedAt       DateTime?
   acceptedAt                 DateTime?
   pickedUpAt                 DateTime?
   deliveredAt                DateTime?

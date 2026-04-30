@@ -43,6 +43,15 @@ export async function listStoreDeliveries(
     );
 }
 
+export async function getStoreDeliveryById(
+    userId: string,
+    deliveryId: string,
+): Promise<StoreDelivery> {
+    return fetchNestApiJson<StoreDelivery>(`/delivery/deliveries/${deliveryId}`, {
+        headers: buildTenantHeaders(userId),
+    });
+}
+
 export async function createStoreDelivery(
     userId: string,
     orderId: string,

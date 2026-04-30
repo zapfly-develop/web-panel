@@ -161,7 +161,32 @@ export function StoreOrdersWorkspace({
     const deliveryRealtime = useDeliveryRealtime({
         userId,
         onDeliveryAssigned: () => void refreshAll(),
-        onDeliveryStatusChanged: () => void refreshAll(),
+        onDeliveryStatusChanged: (event) => {
+            if (event.status === "DELIVERY_STAGNATED") {
+                toast.error(`Atenção: Pedido #${getShortId(event.orderId)} está estagnado por falta de entregadores!`, {
+                    duration: 10000,
+                    description: "Considere chamar uma frota externa ou aumentar o bônus.",
+                    action: {
+                        label: "Ver Pedido",
+                        onClick: () => {
+                            // First attempt to open the dialog for better UX
+                            const order = orders.find(o => o.id === event.orderId);
+                            if (order) {
+                                setSelectedOrder(order);
+                            } else {
+                                // Fallback to deep link route
+                                window.location.href = `/dashboard/delivery/deliveries/${event.deliveryId}`;
+                            }
+                        }
+                    }
+                });
+
+                // Play alert sound if available
+                const audio = new Audio("/sounds/critical-alert.mp3");
+                audio.play().catch(() => {});
+            }
+            void refreshAll();
+        },
         onRiderNewAvailableDelivery: () => void refreshLogistics(),
         onRiderStatusChanged: () => void refreshLogistics(),
     });

@@ -215,6 +215,14 @@ export async function updateStoreCheckoutSettingsAction(formData: FormData) {
     const deliveryFeeCents = parseMoneyInputToCents(
         formData.get("deliveryFee"),
     );
+    const dynamicFareBonusCents = parseMoneyInputToCents(
+        formData.get("dynamicFareBonus"),
+    );
+    const stagnatedTimeoutMinutes = Math.max(
+        1,
+        Number(formData.get("stagnatedTimeout") ?? 15),
+    );
+
     const acceptedPaymentMethods = parseEnumListValue(
         formData.getAll("acceptedPaymentMethods"),
         Object.values(PaymentMethod),
@@ -232,6 +240,8 @@ export async function updateStoreCheckoutSettingsAction(formData: FormData) {
         },
         data: {
             deliveryFeeCents,
+            dynamicFareBonusCents,
+            stagnatedTimeoutMinutes,
             acceptedPaymentMethods,
             availableDeliveryTypes,
         },
