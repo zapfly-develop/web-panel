@@ -1,10 +1,6 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import {
-    BusinessProfile,
-    DeliveryType,
-    PaymentMethod,
-} from "@prisma/client";
+import { BusinessProfile, DeliveryType, PaymentMethod } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import AssistantProfileForm from "@/components/dashboard/whatsapp/assistant-profile-form";
 import QRConnection from "@/components/dashboard/qr-connection";
@@ -22,12 +18,7 @@ import {
     CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import {
-    Tabs,
-    TabsContent,
-    TabsList,
-    TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
     Clock3,
@@ -201,9 +192,9 @@ export default async function DashboardWhatsappPage() {
         : "Ainda nao configurado";
     const isStoreSetupReady = Boolean(
         assistantName.trim() &&
-            storeAddress &&
-            savedAcceptedPaymentMethods.length &&
-            savedAvailableDeliveryTypes.length,
+        storeAddress &&
+        savedAcceptedPaymentMethods.length &&
+        savedAvailableDeliveryTypes.length,
     );
 
     return (
@@ -242,43 +233,43 @@ export default async function DashboardWhatsappPage() {
                 </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
                 <Card className="border-none shadow-sm">
-                    <CardContent className="px-4 py-3">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                            Instancias
+                    <CardContent className="px-3 py-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                            Instâncias
                         </p>
-                        <p className="mt-1 text-2xl font-bold text-slate-900">
+                        <p className="mt-1 text-xl font-bold text-slate-900">
                             {totalInstances}
                         </p>
                     </CardContent>
                 </Card>
                 <Card className="border-none shadow-sm">
-                    <CardContent className="px-4 py-3">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    <CardContent className="px-3 py-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
                             Conectadas
                         </p>
-                        <p className="mt-1 text-2xl font-bold text-slate-900">
+                        <p className="mt-1 text-xl font-bold text-slate-900">
                             {connectedCount}
                         </p>
                     </CardContent>
                 </Card>
                 <Card className="border-none shadow-sm">
-                    <CardContent className="px-4 py-3">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    <CardContent className="px-3 py-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
                             Pendentes
                         </p>
-                        <p className="mt-1 text-2xl font-bold text-slate-900">
+                        <p className="mt-1 text-xl font-bold text-slate-900">
                             {disconnectedCount}
                         </p>
                     </CardContent>
                 </Card>
                 <Card className="border-none shadow-sm">
-                    <CardContent className="px-4 py-3">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    <CardContent className="px-3 py-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
                             Handovers
                         </p>
-                        <p className="mt-1 text-2xl font-bold text-slate-900">
+                        <p className="mt-1 text-xl font-bold text-slate-900">
                             {totalHandovers}
                         </p>
                     </CardContent>
@@ -292,33 +283,33 @@ export default async function DashboardWhatsappPage() {
                             <div className="space-y-3">
                                 <div className="space-y-1">
                                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                                        Instancia principal
+                                        Instância principal
                                     </p>
-                                    <p className="font-semibold text-slate-900">
+                                    <p className="font-semibold text-slate-900 truncate">
                                         {managedInstanceName}
                                     </p>
                                     <p className="text-sm text-slate-500">
-                                        O webhook tecnico continua configurado
-                                        automaticamente no back-end.
+                                        Webhook configurado automaticamente.
                                     </p>
                                 </div>
-                                <div className="grid gap-2 sm:grid-cols-2">
+                                <div className="grid grid-cols-2 gap-2">
                                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                                            Prontidao da loja
+                                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                                            Prontidão
                                         </p>
-                                        <p className="mt-1 text-sm font-medium text-slate-900">
+                                        <p className="mt-1 text-xs font-medium text-slate-900">
                                             {isStoreSetupReady
-                                                ? "Loja pronta para vender"
-                                                : "Falta ajustar checkout"}
+                                                ? "Pronta ✓"
+                                                : "Pendente"}
                                         </p>
                                     </div>
                                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
                                             Pagamentos
                                         </p>
-                                        <p className="mt-1 text-sm font-medium text-slate-900">
-                                            {savedAcceptedPaymentMethods.length} metodo(s)
+                                        <p className="mt-1 text-xs font-medium text-slate-900">
+                                            {savedAcceptedPaymentMethods.length}{" "}
+                                            método(s)
                                         </p>
                                     </div>
                                 </div>
@@ -351,16 +342,14 @@ export default async function DashboardWhatsappPage() {
                             assistantName,
                             businessProfile,
                             storeAddress,
-                            deliveryFee: formatCurrencyInput(
-                                deliveryFeeCents,
-                            ),
+                            deliveryFee: formatCurrencyInput(deliveryFeeCents),
                             acceptedPaymentMethods,
                             availableDeliveryTypes,
                         }}
                     />
                 </div>
 
-                <Card className="border-none shadow-sm">
+                <Card className="border-none shadow-sm min-w-0 overflow-hidden">
                     <CardHeader className="pb-3">
                         <CardTitle className="flex items-center gap-2 text-base">
                             <Settings2 className="h-4 w-4 text-primary" />
@@ -372,49 +361,63 @@ export default async function DashboardWhatsappPage() {
                     </CardHeader>
                     <CardContent>
                         <Tabs defaultValue="connection" className="gap-4">
-                            <TabsList className="h-auto w-full justify-start gap-1.5 rounded-2xl bg-slate-100/80 p-1.5 flex-wrap">
+                            <TabsList className="flex w-full flex-nowrap overflow-x-auto overflow-y-hidden scrollbar-none scroll-smooth snap-x snap-mandatory rounded-2xl bg-slate-100/80 p-1.5 gap-1 justify-start">
                                 <TabsTrigger
                                     value="connection"
-                                    className="h-9 flex-none rounded-xl px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                                    className="snap-start shrink-0 h-7 rounded-xl px-3 gap-1.5 whitespace-nowrap text-xs font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm"
                                 >
-                                    <PlugZap className="h-4 w-4" />
+                                    <PlugZap className="size-3.5" />
                                     Conexão
                                 </TabsTrigger>
                                 <TabsTrigger
                                     value="store"
-                                    className="h-9 flex-none rounded-xl px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                                    className="snap-start shrink-0 h-7 rounded-xl px-3 gap-1.5 whitespace-nowrap text-xs font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm"
                                 >
-                                    <Store className="h-4 w-4" />
-                                    Loja & Endereço
+                                    <Store className="size-3.5" />
+                                    Loja
                                 </TabsTrigger>
                                 <TabsTrigger
                                     value="logistics"
-                                    className="h-9 flex-none rounded-xl px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                                    className="snap-start shrink-0 h-7 rounded-xl px-3 gap-1.5 whitespace-nowrap text-xs font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm"
                                 >
-                                    <Settings2 className="h-4 w-4" />
-                                    Logística & Pagamentos
+                                    <Settings2 className="size-3.5" />
+                                    Logística
                                 </TabsTrigger>
                                 <TabsTrigger
                                     value="hours"
-                                    className="h-9 flex-none rounded-xl px-4 data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                                    className="snap-start shrink-0 h-7 rounded-xl px-3 gap-1.5 whitespace-nowrap text-xs font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm"
                                 >
-                                    <Clock3 className="h-4 w-4" />
+                                    <Clock3 className="size-3.5" />
                                     Horários
                                 </TabsTrigger>
                             </TabsList>
 
                             {/* ABA 1: CONEXÃO */}
-                            <TabsContent value="connection" className="space-y-4 outline-none">
+                            <TabsContent
+                                value="connection"
+                                className="space-y-4 outline-none"
+                            >
                                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Resumo da Instância</p>
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
+                                        Resumo da Instância
+                                    </p>
                                     <div className="grid gap-3 sm:grid-cols-2">
                                         <div className="space-y-1">
-                                            <p className="text-xs text-slate-400">Status Atual</p>
-                                            <p className="text-sm font-medium text-slate-900">{primaryInstance?.status || "Desconectado"}</p>
+                                            <p className="text-xs text-slate-400">
+                                                Status Atual
+                                            </p>
+                                            <p className="text-sm font-medium text-slate-900">
+                                                {primaryInstance?.status ||
+                                                    "Desconectado"}
+                                            </p>
                                         </div>
                                         <div className="space-y-1">
-                                            <p className="text-xs text-slate-400">Atendente Responsável</p>
-                                            <p className="text-sm font-medium text-slate-900">{assistantName}</p>
+                                            <p className="text-xs text-slate-400">
+                                                Atendente Responsável
+                                            </p>
+                                            <p className="text-sm font-medium text-slate-900">
+                                                {assistantName}
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
@@ -427,10 +430,17 @@ export default async function DashboardWhatsappPage() {
                                 <div className="space-y-3">
                                     <div className="flex items-center gap-2 px-1">
                                         <MessageCircle className="h-4 w-4 text-primary" />
-                                        <Label htmlFor="closedMessage" className="text-sm font-semibold">Mensagem de Ausência</Label>
+                                        <Label
+                                            htmlFor="closedMessage"
+                                            className="text-sm font-semibold"
+                                        >
+                                            Mensagem de Ausência
+                                        </Label>
                                     </div>
                                     <form
-                                        action={updateWhatsappClosedMessageAction}
+                                        action={
+                                            updateWhatsappClosedMessageAction
+                                        }
                                         className="space-y-3"
                                     >
                                         <Textarea
@@ -446,9 +456,14 @@ export default async function DashboardWhatsappPage() {
                                         />
                                         <div className="flex items-center justify-between">
                                             <p className="text-[10px] text-slate-500 max-w-[200px]">
-                                                Deixe em branco para usar o padrão do sistema.
+                                                Deixe em branco para usar o
+                                                padrão do sistema.
                                             </p>
-                                            <Button type="submit" size="sm" variant="outline">
+                                            <Button
+                                                type="submit"
+                                                size="sm"
+                                                variant="outline"
+                                            >
                                                 Salvar Mensagem
                                             </Button>
                                         </div>
@@ -457,21 +472,32 @@ export default async function DashboardWhatsappPage() {
                             </TabsContent>
 
                             {/* ABA 2: LOJA & ENDEREÇO */}
-                            <TabsContent value="store" className="space-y-6 outline-none">
+                            <TabsContent
+                                value="store"
+                                className="space-y-6 outline-none"
+                            >
                                 <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
                                     <div className="flex items-center gap-2 mb-2">
                                         <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                                        <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">📍 Endereço Ativo</p>
+                                        <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">
+                                            📍 Endereço Ativo
+                                        </p>
                                     </div>
                                     <p className="text-sm text-emerald-900 leading-relaxed">
-                                        {storeAddress || "Nenhum endereço configurado ainda."}
+                                        {storeAddress ||
+                                            "Nenhum endereço configurado ainda."}
                                     </p>
                                 </div>
 
                                 <section className="space-y-4">
                                     <div className="space-y-1">
-                                        <h4 className="text-sm font-semibold text-slate-900">Perfil do Negócio</h4>
-                                        <p className="text-xs text-slate-500">Como sua loja se apresenta para os clientes.</p>
+                                        <h4 className="text-sm font-semibold text-slate-900">
+                                            Perfil do Negócio
+                                        </h4>
+                                        <p className="text-xs text-slate-500">
+                                            Como sua loja se apresenta para os
+                                            clientes.
+                                        </p>
                                     </div>
                                     <AssistantProfileForm
                                         defaultAssistantName={assistantName}
@@ -482,34 +508,74 @@ export default async function DashboardWhatsappPage() {
 
                                 <section className="space-y-4">
                                     <div className="space-y-1">
-                                        <h4 className="text-sm font-semibold text-slate-900">Gestão de Endereço Estruturado</h4>
-                                        <p className="text-xs text-slate-500">Essencial para o cálculo de frete e geolocalização.</p>
+                                        <h4 className="text-sm font-semibold text-slate-900">
+                                            Gestão de Endereço Estruturado
+                                        </h4>
+                                        <p className="text-xs text-slate-500">
+                                            Essencial para o cálculo de frete e
+                                            geolocalização.
+                                        </p>
                                     </div>
                                     <StoreAddressForm
-                                        defaultValues={userSettings?.storeAddressDetails ? {
-                                            postalCode: userSettings.storeAddressDetails.postalCode || "",
-                                            street: userSettings.storeAddressDetails.street,
-                                            number: userSettings.storeAddressDetails.number,
-                                            neighborhood: userSettings.storeAddressDetails.neighborhood || "",
-                                            complement: userSettings.storeAddressDetails.complement || "",
-                                            city: userSettings.storeAddressDetails.city,
-                                            state: userSettings.storeAddressDetails.state,
-                                        } : undefined}
-                                        onSubmit={updateStructuredStoreAddressAction}
+                                        defaultValues={
+                                            userSettings?.storeAddressDetails
+                                                ? {
+                                                      postalCode:
+                                                          userSettings
+                                                              .storeAddressDetails
+                                                              .postalCode || "",
+                                                      street: userSettings
+                                                          .storeAddressDetails
+                                                          .street,
+                                                      number: userSettings
+                                                          .storeAddressDetails
+                                                          .number,
+                                                      neighborhood:
+                                                          userSettings
+                                                              .storeAddressDetails
+                                                              .neighborhood ||
+                                                          "",
+                                                      complement:
+                                                          userSettings
+                                                              .storeAddressDetails
+                                                              .complement || "",
+                                                      city: userSettings
+                                                          .storeAddressDetails
+                                                          .city,
+                                                      state: userSettings
+                                                          .storeAddressDetails
+                                                          .state,
+                                                  }
+                                                : undefined
+                                        }
+                                        onSubmit={
+                                            updateStructuredStoreAddressAction
+                                        }
                                     />
                                 </section>
                             </TabsContent>
 
                             {/* ABA 3: LOGÍSTICA & PAGAMENTOS */}
-                            <TabsContent value="logistics" className="space-y-4 outline-none">
-                                <div className="grid gap-3 sm:grid-cols-2">
-                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Taxa de Entrega</p>
-                                        <p className="mt-1 text-sm font-bold text-slate-900">{deliveryFeeLabel}</p>
+                            <TabsContent
+                                value="logistics"
+                                className="space-y-4 outline-none"
+                            >
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+                                            Entrega
+                                        </p>
+                                        <p className="mt-1 text-sm font-bold text-slate-900 truncate">
+                                            {deliveryFeeLabel}
+                                        </p>
                                     </div>
-                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Pagamentos</p>
-                                        <p className="mt-1 text-sm font-medium text-slate-900 truncate">{paymentMethodsLabel}</p>
+                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+                                            Pagamentos
+                                        </p>
+                                        <p className="mt-1 text-sm font-medium text-slate-900 truncate">
+                                            {paymentMethodsLabel}
+                                        </p>
                                     </div>
                                 </div>
 
@@ -521,7 +587,9 @@ export default async function DashboardWhatsappPage() {
                                     defaultDynamicFareBonus={formatCurrencyInput(
                                         dynamicFareBonusCents,
                                     )}
-                                    defaultStagnatedTimeout={stagnatedTimeoutMinutes}
+                                    defaultStagnatedTimeout={
+                                        stagnatedTimeoutMinutes
+                                    }
                                     defaultAcceptedPaymentMethods={
                                         acceptedPaymentMethods
                                     }
@@ -533,12 +601,19 @@ export default async function DashboardWhatsappPage() {
                             </TabsContent>
 
                             {/* ABA 4: HORÁRIOS */}
-                            <TabsContent value="hours" className="space-y-4 outline-none">
+                            <TabsContent
+                                value="hours"
+                                className="space-y-4 outline-none"
+                            >
                                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 mb-2">
                                     <div className="flex items-center justify-between">
                                         <div className="space-y-1">
-                                            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Fuso Horário</p>
-                                            <p className="text-sm font-medium text-slate-900">{operatingTimezone}</p>
+                                            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                                                Fuso Horário
+                                            </p>
+                                            <p className="text-sm font-medium text-slate-900">
+                                                {operatingTimezone}
+                                            </p>
                                         </div>
                                         <Clock3 className="h-5 w-5 text-slate-400" />
                                     </div>
@@ -613,10 +688,12 @@ export default async function DashboardWhatsappPage() {
                                         </div>
                                         <div className="flex flex-wrap gap-2 text-xs text-slate-500">
                                             <span>
-                                                {instance._count.orders} pedido(s)
+                                                {instance._count.orders}{" "}
+                                                pedido(s)
                                             </span>
                                             <span>
-                                                {instance._count.handovers} handover(s)
+                                                {instance._count.handovers}{" "}
+                                                handover(s)
                                             </span>
                                         </div>
                                     </div>
@@ -626,7 +703,8 @@ export default async function DashboardWhatsappPage() {
                                             {instance._count.orders} pedidos
                                         </Badge>
                                         <Badge variant="secondary">
-                                            {instance._count.handovers} handovers
+                                            {instance._count.handovers}{" "}
+                                            handovers
                                         </Badge>
                                     </div>
 
