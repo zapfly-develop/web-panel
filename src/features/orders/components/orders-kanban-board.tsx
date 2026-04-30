@@ -1,6 +1,11 @@
 "use client";
 
-import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
+import {
+    DragDropContext,
+    Droppable,
+    Draggable,
+    DropResult,
+} from "@hello-pangea/dnd";
 import type { StoreDelivery } from "@/features/delivery/services/delivery-types";
 import type { OrderStatus, StoreOrder } from "../services/order-types";
 import {
@@ -20,12 +25,7 @@ type OrdersKanbanBoardProps = {
     onPrint: (order: StoreOrder) => void;
 };
 
-const columns: OrderStatus[] = [
-    "PENDING",
-    "PREPARING",
-    "SHIPPED",
-    "DELIVERED",
-];
+const columns: OrderStatus[] = ["PENDING", "PREPARING", "SHIPPED", "DELIVERED"];
 
 export function OrdersKanbanBoard({
     orders,
@@ -42,7 +42,7 @@ export function OrdersKanbanBoard({
     return (
         <DragDropContext onDragEnd={onDragEnd}>
             <div className="overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0">
-                <div className="grid min-w-[1000px] lg:min-w-0 lg:grid-cols-4 gap-3">
+                <div className="grid lg:min-w-0 lg:grid-cols-4 gap-3">
                     {columns.map((status) => {
                         const columnOrders = ordersByStatus[status];
 
@@ -73,43 +73,70 @@ export function OrdersKanbanBoard({
                                                     Sem pedidos
                                                 </div>
                                             ) : (
-                                                columnOrders.map((order, index) => (
-                                                    <Draggable
-                                                        key={order.id}
-                                                        draggableId={order.id}
-                                                        index={index}
-                                                        isDragDisabled={order.status === "DELIVERED"}
-                                                    >
-                                                        {(provided, snapshot) => (
-                                                            <div
-                                                                ref={provided.innerRef}
-                                                                {...provided.draggableProps}
-                                                                {...provided.dragHandleProps}
-                                                                style={{
-                                                                    ...provided.draggableProps.style,
-                                                                    opacity: snapshot.isDragging ? 0.8 : 1,
-                                                                }}
-                                                            >
-                                                                <OrderCard
-                                                                    order={order}
-                                                                    delivery={getDeliveryForOrder(
-                                                                        deliveriesByOrderId,
-                                                                        order.id,
-                                                                    )}
-                                                                    now={now}
-                                                                    compact
-                                                                    isCreatingDelivery={
-                                                                        creatingDeliveryOrderId ===
-                                                                        order.id
+                                                columnOrders.map(
+                                                    (order, index) => (
+                                                        <Draggable
+                                                            key={order.id}
+                                                            draggableId={
+                                                                order.id
+                                                            }
+                                                            index={index}
+                                                            isDragDisabled={
+                                                                order.status ===
+                                                                "DELIVERED"
+                                                            }
+                                                        >
+                                                            {(
+                                                                provided,
+                                                                snapshot,
+                                                            ) => (
+                                                                <div
+                                                                    ref={
+                                                                        provided.innerRef
                                                                     }
-                                                                    onCreateDelivery={onCreateDelivery}
-                                                                    onOpenDetails={onOpenDetails}
-                                                                    onPrint={onPrint}
-                                                                />
-                                                            </div>
-                                                        )}
-                                                    </Draggable>
-                                                ))
+                                                                    {...provided.draggableProps}
+                                                                    {...provided.dragHandleProps}
+                                                                    style={{
+                                                                        ...provided
+                                                                            .draggableProps
+                                                                            .style,
+                                                                        opacity:
+                                                                            snapshot.isDragging
+                                                                                ? 0.8
+                                                                                : 1,
+                                                                    }}
+                                                                >
+                                                                    <OrderCard
+                                                                        order={
+                                                                            order
+                                                                        }
+                                                                        delivery={getDeliveryForOrder(
+                                                                            deliveriesByOrderId,
+                                                                            order.id,
+                                                                        )}
+                                                                        now={
+                                                                            now
+                                                                        }
+                                                                        compact
+                                                                        isCreatingDelivery={
+                                                                            creatingDeliveryOrderId ===
+                                                                            order.id
+                                                                        }
+                                                                        onCreateDelivery={
+                                                                            onCreateDelivery
+                                                                        }
+                                                                        onOpenDetails={
+                                                                            onOpenDetails
+                                                                        }
+                                                                        onPrint={
+                                                                            onPrint
+                                                                        }
+                                                                    />
+                                                                </div>
+                                                            )}
+                                                        </Draggable>
+                                                    ),
+                                                )
                                             )}
                                             {provided.placeholder}
                                         </div>
