@@ -8,6 +8,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSessionUser } from "@/lib/server-session";
+import { updateStoreAddress } from "@/features/delivery/services/delivery-api";
 import {
     DEFAULT_CLOSE_TIME,
     DEFAULT_OPEN_TIME,
@@ -211,7 +212,6 @@ export async function updateAssistantProfileAction(formData: FormData) {
 
 export async function updateStoreCheckoutSettingsAction(formData: FormData) {
     const user = await requireSessionUser();
-    const storeAddress = String(formData.get("storeAddress") ?? "").trim();
     const deliveryFeeCents = parseMoneyInputToCents(
         formData.get("deliveryFee"),
     );
@@ -226,22 +226,11 @@ export async function updateStoreCheckoutSettingsAction(formData: FormData) {
         "Selecione pelo menos uma modalidade de atendimento.",
     );
 
-    if (storeAddress.length < 8) {
-        throw new Error(
-            "Informe um endereco valido para a loja com rua, numero e referencia basica.",
-        );
-    }
-
-    if (storeAddress.length > 220) {
-        throw new Error("O endereco da loja deve ter ate 220 caracteres.");
-    }
-
     await prisma.user.update({
         where: {
             id: user.id,
         },
         data: {
-            storeAddress,
             deliveryFeeCents,
             acceptedPaymentMethods,
             availableDeliveryTypes,
@@ -250,6 +239,32 @@ export async function updateStoreCheckoutSettingsAction(formData: FormData) {
 
     revalidatePath("/dashboard/whatsapp");
     revalidatePath("/dashboard/orders");
+    revalidatePath("/dashboard");
+}
+
+export async function updateStructuredStoreAddressAction(values: {
+    postalCode: string;
+    street: string;
+    number: string;
+    neighborhood: string;
+    complement?: string;
+    city: string;
+    state: string;
+}) {
+    const user = await requireSessionUser();
+
+    // 1. Call Nest API to update structured address and get geocoding
+    const updatedAddress = await updateStoreAddress(user.id, values);
+
+    // 2. Update User.storeAddress (legacy text field) as a mirror for compatibility
+    await prisma.user.update({
+        where: { id: user.id },
+        data: {
+            storeAddress: updatedAddress.formattedAddress,
+        },
+    });
+
+    revalidatePath("/dashboard/whatsapp");
     revalidatePath("/dashboard");
 }
 

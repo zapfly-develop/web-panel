@@ -129,31 +129,6 @@ export default function StoreCheckoutSettingsForm({
 
             {/* Conteúdo principal */}
             <div className="space-y-4 p-5">
-                {/* Endereço da loja */}
-                <div className="space-y-2">
-                    <Label
-                        htmlFor="storeAddress"
-                        className="text-sm font-medium"
-                    >
-                        Endereco da loja
-                    </Label>
-                    <Textarea
-                        id="storeAddress"
-                        name="storeAddress"
-                        rows={3}
-                        value={storeAddress}
-                        onChange={(event) =>
-                            setStoreAddress(event.target.value)
-                        }
-                        disabled={isPending}
-                        placeholder="Ex: Rua Joaquim Fernandes Meira, 14, Centro"
-                        className="resize-none text-sm"
-                    />
-                    <p className="text-[11px] leading-5 text-slate-500">
-                        Usado no fluxo de retirada e confirmação de dados
-                    </p>
-                </div>
-
                 {/* Grid para Taxa + Modalidades em telas maiores */}
                 <div className="grid gap-4 md:grid-cols-2">
                     {/* Taxa de entrega */}

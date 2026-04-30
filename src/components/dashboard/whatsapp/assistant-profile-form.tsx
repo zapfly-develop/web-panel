@@ -63,11 +63,11 @@ export default function AssistantProfileForm({
     return (
         <form
             onSubmit={handleSubmit}
-            className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+            className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-sm"
         >
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px_auto] lg:items-end">
-                <div className="space-y-2">
-                    <Label htmlFor="assistantName">Nome do atendente</Label>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+                <div className="space-y-1.5">
+                    <Label htmlFor="assistantName" className="text-xs font-semibold uppercase text-slate-500">Nome do atendente</Label>
                     <Input
                         id="assistantName"
                         name="assistantName"
@@ -78,15 +78,12 @@ export default function AssistantProfileForm({
                         placeholder="Ex: Clara, Julia, Time da Loja"
                         disabled={isPending}
                         maxLength={80}
+                        className="bg-white h-9"
                     />
-                    <p className="text-xs text-slate-500">
-                        Esse nome aparece no contexto da IA e pode ser alterado
-                        quando quiser.
-                    </p>
                 </div>
 
-                <div className="space-y-2">
-                    <Label htmlFor="businessProfile">Perfil do negocio</Label>
+                <div className="space-y-1.5">
+                    <Label htmlFor="businessProfile" className="text-xs font-semibold uppercase text-slate-500">Perfil do negocio</Label>
                     <Select
                         value={businessProfile}
                         onValueChange={(value) =>
@@ -96,7 +93,7 @@ export default function AssistantProfileForm({
                     >
                         <SelectTrigger
                             id="businessProfile"
-                            className="w-full bg-white"
+                            className="w-full bg-white h-9"
                         >
                             <SelectValue placeholder="Selecione o perfil" />
                         </SelectTrigger>
@@ -111,14 +108,16 @@ export default function AssistantProfileForm({
                             ))}
                         </SelectContent>
                     </Select>
-                    <p className="text-xs text-slate-500">
-                        {selectedProfile.description}
-                    </p>
                 </div>
 
-                <Button type="submit" size="sm" disabled={isPending}>
-                    {isPending ? "Salvando..." : "Salvar perfil"}
+                <Button type="submit" size="sm" disabled={isPending} className="w-full lg:w-auto h-9">
+                    {isPending ? "Salvando..." : "Atualizar Perfil"}
                 </Button>
+            </div>
+
+            <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400">
+                <p>{selectedProfile.description}</p>
+                <p>IA responderá como {assistantName || "Clara"}</p>
             </div>
 
             {errorMessage ? (

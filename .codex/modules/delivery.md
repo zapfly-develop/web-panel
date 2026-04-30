@@ -256,8 +256,8 @@ Env vars:
 Formula atual:
 
 - distancia = Haversine em linha reta entre coordenadas da loja e do cliente;
-- taxa de entrega = taxa base + distancia em km * preco por km;
-- repasse = taxa de entrega * percentual de repasse.
+- taxa de entrega = taxa base + distancia em km \* preco por km;
+- repasse = taxa de entrega \* percentual de repasse.
 
 Configuracao:
 
@@ -353,3 +353,30 @@ Entregas:
 - Calculo de km e Haversine em linha reta; nao ha roteirizacao por mapa.
 - Repasse financeiro real ainda nao esta conectado a carteira/provedor externo.
 - Event bus atual e interno ao processo; em multi-instancia sera preciso broker persistente ou barramento externo.
+
+## Proximas implementações
+
+Frontend (Painel do Lojista - UX de Configuração)
+Objetivo: Criar a interface para o lojista configurar esses limites dentro da nova estrutura de abas.
+
+# 1. Nova Seção na Aba de Logística:
+
+Dentro da aba Logística (que criámos anteriormente), adicionar um grupo de campos chamado "Contingência Automática".
+
+Inputs Necessários:
+
+Switch (Ativar/Desativar): "Ativar Tarifa Dinâmica por Demora".
+
+Valor do Bônus: Input numérico (R$) para definir quanto será somado ao entregador após o timeout.
+
+Tempo de Alerta: Input para definir após quantos minutos a notificação crítica deve ser enviada.
+
+# 2. Feedback Visual no Dashboard (Status Stagnated):
+
+Quando um pedido entrar em DELIVERY_STAGNATED, o card de métricas de "Entregas" deve mudar de cor (ex: de azul para laranja pulsante) para chamar a atenção imediata do lojista.
+
+Adicionar um aviso visual no detalhe do pedido: "Tarifa dinâmica de R$ X,XX aplicada automaticamente para acelerar a coleta."
+
+3. Regras de Interface:
+
+Utilizar Tooltip para explicar ao lojista que o valor do bônus sai da margem da loja para garantir a entrega, aumentando a atratividade para o Rider.

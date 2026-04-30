@@ -1,5 +1,5 @@
 import { fetchNestApiJson } from "@/lib/nest-api";
-import type { StoreOrder } from "./order-types";
+import type { OrderStatus, StoreOrder } from "./order-types";
 
 function buildTenantHeaders(userId: string): HeadersInit {
     return {
@@ -29,4 +29,23 @@ export async function sendDeliveryOrderToDelivery(
             headers: buildTenantHeaders(userId),
         },
     );
+}
+
+export async function updateOrderStatus(
+    orderId: string,
+    userId: string,
+    payload: {
+        status: OrderStatus;
+        notifyCustomer?: boolean;
+        paymentHandledBy?: "RIDER" | "STORE_MACHINE";
+    },
+): Promise<StoreOrder> {
+    return fetchNestApiJson<StoreOrder>(`/delivery/orders/${orderId}/status`, {
+        method: "PATCH",
+        headers: {
+            ...buildTenantHeaders(userId),
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+    });
 }

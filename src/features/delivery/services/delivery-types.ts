@@ -110,6 +110,35 @@ export type DeliveryOwnerSummary = {
     deliveryFeeCents: number;
 };
 
+export type StoreAddressPayload = {
+    postalCode: string;
+    street: string;
+    number: string;
+    neighborhood: string;
+    complement?: string;
+    city: string;
+    state: string;
+};
+
+export type StoreAddress = {
+    id: string;
+    ownerUserId: string;
+    street: string;
+    number: string;
+    neighborhood: string | null;
+    complement: string | null;
+    city: string;
+    state: string;
+    postalCode: string | null;
+    country: string;
+    formattedAddress: string;
+    latitude: number;
+    longitude: number;
+    geocodedAt: string;
+    createdAt: string;
+    updatedAt: string;
+};
+
 export type StoreDelivery = {
     id: string;
     ownerUserId: string;

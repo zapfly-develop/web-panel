@@ -61,7 +61,8 @@ export function OrderCard({
     return (
         <article
             className={cn(
-                "rounded-md border bg-white p-3 shadow-sm transition-colors",
+                "rounded-md border bg-white p-3 shadow-sm transition-colors select-none",
+                order.status !== "DELIVERED" && "cursor-grab active:cursor-grabbing",
                 slaLevel === "warning" && "border-amber-300",
                 slaLevel === "critical" && "border-rose-300",
                 slaLevel === "normal" && "border-slate-200",

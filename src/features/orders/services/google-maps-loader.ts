@@ -5,7 +5,7 @@ export type GoogleMapsLatLngLiteral = {
 
 export type GoogleMapsMap = {
     fitBounds: (
-        bounds: GoogleMapsLatLngBounds,
+        bounds: any,
         padding?: number | GoogleMapsPadding,
     ) => void;
     setCenter: (position: GoogleMapsLatLngLiteral) => void;
