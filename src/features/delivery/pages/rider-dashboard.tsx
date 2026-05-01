@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     AlertCircle,
     Bike,
@@ -69,6 +69,87 @@ import {
 } from "../components/optional-components";
 import { DeliveryMap } from "../components/delivery-map";
 
+
+
+type PushSubscriptionPayload = {
+    endpoint: string;
+    expirationTime: number | null;
+    keys: {
+        p256dh: string;
+        auth: string;
+    };
+};
+
+function urlBase64ToUint8Array(base64String: string) {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const normalized = (base64String + padding)
+        .replace(/-/g, "+")
+        .replace(/_/g, "/");
+
+    const rawData = window.atob(normalized);
+    const outputArray = new Uint8Array(rawData.length);
+
+    for (let i = 0; i < rawData.length; i += 1) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+
+    return outputArray;
+}
+
+async function ensurePushSubscription() {
+    if (
+        typeof window === "undefined" ||
+        !("Notification" in window) ||
+        !("serviceWorker" in navigator)
+    ) {
+        return { ensured: false, reason: "unsupported" as const };
+    }
+
+    const permission = Notification.permission;
+    if (permission === "denied") {
+        return { ensured: false, reason: "denied" as const };
+    }
+
+    const registration = await navigator.serviceWorker.ready;
+    let nextPermission = permission;
+
+    if (nextPermission !== "granted") {
+        nextPermission = await Notification.requestPermission();
+    }
+
+    if (nextPermission !== "granted") {
+        return { ensured: false, reason: "not-granted" as const };
+    }
+
+    const existingSubscription = await registration.pushManager.getSubscription();
+    if (existingSubscription) {
+        return { ensured: true, reason: "already-subscribed" as const };
+    }
+
+    const { publicKey } = await fetchJson<{ publicKey: string }>(
+        "/api/notifications/vapid-public-key",
+    );
+
+    if (!publicKey) {
+        return { ensured: false, reason: "missing-key" as const };
+    }
+
+    const createdSubscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+    });
+
+    await fetchJson("/api/notifications/push-subscriptions", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(createdSubscription.toJSON() as PushSubscriptionPayload),
+    });
+
+    return { ensured: true, reason: "subscribed" as const };
+}
+
 type RiderDashboardProps = {
     userId: string;
     initialProfile: DeliveryRider | null;
@@ -81,6 +162,18 @@ type DeliveryActionPayload = {
     reason?: string;
     description?: string;
 };
+
+
+type RiderDailyStats = {
+    deliveriesCompleted: number;
+    totalEarnings: number;
+    onlineSeconds: number;
+};
+
+function getTodayStatsKey(userId: string) {
+    const dayKey = new Date().toISOString().slice(0, 10);
+    return `rider-daily-stats:${userId}:${dayKey}`;
+}
 
 function formatTime(value: string) {
     return new Intl.DateTimeFormat("pt-BR", {
@@ -142,6 +235,14 @@ export function RiderDashboard({
     const [incidentDescription, setIncidentDescription] = useState("");
     const [availableOffer, setAvailableOffer] =
         useState<RiderNewAvailableDeliveryEvent | null>(null);
+    const [dailyStats, setDailyStats] = useState<RiderDailyStats>({
+        deliveriesCompleted: 0,
+        totalEarnings: 0,
+        onlineSeconds: 0,
+    });
+    const [justAccepted, setJustAccepted] = useState(false);
+    const [justPickedUp, setJustPickedUp] = useState(false);
+    const onlineStartedAtRef = useRef<number | null>(null);
 
     const isActiveRider = profile?.status === "ACTIVE";
     const isOnline = isOperationallyOnline(profile);
@@ -259,6 +360,56 @@ export function RiderDashboard({
     const contingencies = useDeliveryContingencies(activeDelivery);
 
     useEffect(() => {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        const raw = window.localStorage.getItem(getTodayStatsKey(userId));
+        if (!raw) return;
+
+        try {
+            const parsed = JSON.parse(raw) as RiderDailyStats;
+            setDailyStats({
+                deliveriesCompleted: parsed.deliveriesCompleted || 0,
+                totalEarnings: parsed.totalEarnings || 0,
+                onlineSeconds: parsed.onlineSeconds || 0,
+            });
+        } catch {
+            window.localStorage.removeItem(getTodayStatsKey(userId));
+        }
+    }, [userId]);
+
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            window.localStorage.setItem(getTodayStatsKey(userId), JSON.stringify(dailyStats));
+        }
+    }, [dailyStats, userId]);
+
+    useEffect(() => {
+        if (isOnline && onlineStartedAtRef.current == null) {
+            onlineStartedAtRef.current = Date.now();
+        }
+
+        if (!isOnline && onlineStartedAtRef.current != null) {
+            const elapsed = Math.max(0, Math.floor((Date.now() - onlineStartedAtRef.current) / 1000));
+            setDailyStats((current) => ({ ...current, onlineSeconds: current.onlineSeconds + elapsed }));
+            onlineStartedAtRef.current = null;
+        }
+    }, [isOnline]);
+
+    useEffect(() => {
+        if (!activeDelivery || activeDelivery.status !== "DELIVERED") {
+            return;
+        }
+
+        setDailyStats((current) => ({
+            deliveriesCompleted: current.deliveriesCompleted + 1,
+            totalEarnings: current.totalEarnings + (activeDelivery.riderPayoutCents || 0),
+            onlineSeconds: current.onlineSeconds,
+        }));
+    }, [activeDelivery?.id, activeDelivery?.status]);
+
+    useEffect(() => {
         const interval = window.setInterval(
             () => void refreshActiveDelivery(),
             realtime.isConnected ? 60000 : 20000,
@@ -341,6 +492,24 @@ export function RiderDashboard({
             toast.success(
                 nextChecked ? "Você está online." : "Você está offline.",
             );
+
+            if (nextChecked) {
+                const pushResult = await ensurePushSubscription();
+
+                if (pushResult.reason === "denied") {
+                    toast.warning(
+                        "Notificações bloqueadas no navegador. Ative para receber novas corridas.",
+                    );
+                } else if (pushResult.reason === "not-granted") {
+                    toast.info(
+                        "Permissão de notificações não concedida. Sem isso você pode perder novas entregas.",
+                    );
+                } else if (pushResult.reason === "unsupported") {
+                    toast.info(
+                        "Este dispositivo não suporta notificações push no PWA.",
+                    );
+                }
+            }
         } catch (error) {
             toast.error(
                 error instanceof Error
@@ -393,6 +562,16 @@ export function RiderDashboard({
             }
 
             await Promise.all([refreshActiveDelivery(), refreshProfile()]);
+
+            if (action === "accept") {
+                setJustAccepted(true);
+                window.setTimeout(() => setJustAccepted(false), 1800);
+            }
+
+            if (action === "pick-up") {
+                setJustPickedUp(true);
+                window.setTimeout(() => setJustPickedUp(false), 1800);
+            }
 
             toast.success(`Operação ${actionCopy[action]} concluída.`);
 
@@ -527,7 +706,7 @@ export function RiderDashboard({
             {/* Content */}
             <div className="mx-auto max-w-md space-y-4 px-4 py-6">
                 {/* Availability Card */}
-                <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
+                <div className={cn("overflow-hidden rounded-xl bg-white shadow-lg transition-all", availableOffer && !activeDelivery ? "animate-in slide-in-from-top-4 duration-500 ring-2 ring-sky-300" : "")}>
                     <div className="bg-gradient-to-r from-sky-500 to-sky-600 p-4 text-white">
                         <div className="flex items-center justify-between">
                             <div>
@@ -572,7 +751,7 @@ export function RiderDashboard({
 
                 {/* Status Grid */}
                 <div className="grid grid-cols-2 gap-3">
-                    <div className="overflow-hidden rounded-2xl bg-white shadow-md">
+                    <div className="overflow-hidden rounded-xl bg-white shadow-md">
                         <div className="p-4">
                             <div className="flex items-center gap-3">
                                 <div
@@ -603,7 +782,7 @@ export function RiderDashboard({
                         </div>
                     </div>
 
-                    <div className="overflow-hidden rounded-2xl bg-white shadow-md">
+                    <div className="overflow-hidden rounded-xl bg-white shadow-md">
                         <div className="p-4">
                             <div className="flex items-center gap-3">
                                 <div
@@ -638,18 +817,26 @@ export function RiderDashboard({
                     </div>
                 </div>
 
-                <DailyStats
-                    deliveriesCompleted={5}
-                    totalEarnings={8500} // em centavos
-                    hoursActive={4.5}
-                    averageRating={4.8}
-                />
+                {!activeDelivery ? (
+                    <DailyStats
+                        deliveriesCompleted={dailyStats.deliveriesCompleted}
+                        totalEarnings={dailyStats.totalEarnings}
+                        hoursActive={
+                            (dailyStats.onlineSeconds +
+                                (isOnline && onlineStartedAtRef.current
+                                    ? Math.floor((Date.now() - onlineStartedAtRef.current) / 1000)
+                                    : 0)) /
+                            3600
+                        }
+                        averageRating={4.9}
+                    />
+                ) : null}
 
                 {/* Location Error */}
                 {location.errorMessage ? (
                     <Alert
                         variant="destructive"
-                        className="rounded-2xl shadow-md"
+                        className="rounded-xl shadow-md"
                     >
                         <AlertCircle className="h-4 w-4" />
                         <AlertTitle>Localização pausada</AlertTitle>
@@ -664,7 +851,7 @@ export function RiderDashboard({
                 new Date(profile.incidentBlockedUntil) > new Date() ? (
                     <Alert
                         variant="destructive"
-                        className="rounded-2xl shadow-md"
+                        className="rounded-xl shadow-md"
                     >
                         <Clock3 className="h-4 w-4" />
                         <AlertTitle>Bloqueio Temporário</AlertTitle>
@@ -680,7 +867,7 @@ export function RiderDashboard({
                 ) : null}
 
                 {/* Active Delivery Card */}
-                <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
+                <div className="overflow-hidden rounded-xl bg-white shadow-lg">
                     <div className="bg-gradient-to-r from-slate-800 to-slate-700 p-4 text-white">
                         <div className="flex items-center justify-between">
                             <div>
@@ -738,20 +925,30 @@ export function RiderDashboard({
                                 </div>
                             )}
 
-                            <DeliveryMap
-                                pickupLat={activeDelivery.pickupLatitude}
-                                pickupLng={activeDelivery.pickupLongitude}
-                                destLat={activeDelivery.destinationLatitude}
-                                destLng={activeDelivery.destinationLongitude}
-                                riderLat={riderLatitude}
-                                riderLng={riderLongitude}
-                                status={activeDelivery.status}
-                                distanceKm={
-                                    activeDelivery.distanceMeters
-                                        ? activeDelivery.distanceMeters / 1000
-                                        : undefined
-                                }
-                            />
+                            <div className="relative animate-in fade-in zoom-in-95 duration-500">
+                                <DeliveryMap
+                                    pickupLat={activeDelivery.pickupLatitude}
+                                    pickupLng={activeDelivery.pickupLongitude}
+                                    destLat={activeDelivery.destinationLatitude}
+                                    destLng={activeDelivery.destinationLongitude}
+                                    riderLat={riderLatitude}
+                                    riderLng={riderLongitude}
+                                    status={activeDelivery.status}
+                                    distanceKm={
+                                        activeDelivery.distanceMeters
+                                            ? activeDelivery.distanceMeters / 1000
+                                            : undefined
+                                    }
+                                />
+                                <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between gap-2">
+                                    <Badge className="bg-white/90 text-slate-900 shadow">{activeDelivery.status.replaceAll("_", " ")}</Badge>
+                                    <Badge className="bg-sky-600/90 text-white shadow">
+                                        {activeDelivery.distanceMeters
+                                            ? `${(activeDelivery.distanceMeters / 1000).toFixed(1)} km`
+                                            : "Rota ativa"}
+                                    </Badge>
+                                </div>
+                            </div>
 
                             <DeliveryTimeline
                                 currentStatus={activeDelivery.status}
@@ -792,7 +989,7 @@ export function RiderDashboard({
                                 <div className="pt-2 flex flex-wrap gap-2">
                                     {canAccept && (
                                         <Button
-                                            className="flex-1 bg-sky-600 hover:bg-sky-700"
+                                            className={cn("flex-1 bg-sky-600 hover:bg-sky-700 transition-all", justAccepted && "animate-pulse ring-2 ring-sky-300")}
                                             onClick={() =>
                                                 runDeliveryAction("accept")
                                             }
@@ -809,7 +1006,7 @@ export function RiderDashboard({
 
                                     {canPickUp && (
                                         <Button
-                                            className="flex-1 bg-amber-600 hover:bg-amber-700"
+                                            className={cn("flex-1 bg-amber-600 hover:bg-amber-700 transition-all", justPickedUp && "animate-pulse ring-2 ring-amber-300")}
                                             onClick={() =>
                                                 runDeliveryAction("pick-up")
                                             }
@@ -908,7 +1105,7 @@ export function RiderDashboard({
                         </>
                     ) : availableOffer ? (
                         <div className="p-6">
-                            <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
+                            <div className="rounded-xl border border-sky-200 bg-sky-50 p-5">
                                 <div className="flex items-start justify-between gap-3">
                                     <div>
                                         <Badge className="bg-sky-600 text-white">
@@ -976,7 +1173,7 @@ export function RiderDashboard({
                         </div>
                     ) : (
                         <div className="p-6">
-                            <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">
+                            <div className="rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">
                                 <div className="mx-auto mb-4 inline-flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-slate-100 to-slate-200">
                                     <MapPin className="h-8 w-8 text-slate-400" />
                                 </div>
