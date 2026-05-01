@@ -26,7 +26,6 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useDeliveryRealtime } from "../hooks/use-delivery-realtime";
@@ -45,6 +44,7 @@ import {
 } from "../services/delivery-api";
 import { DailyStats } from "../components/optional-components";
 import { DeliveryMap } from "../components/delivery-map";
+import { ensureRiderPushSubscription } from "../services/push-notification";
 
 type PushSubscriptionPayload = {
     endpoint: string;
@@ -69,63 +69,6 @@ function urlBase64ToUint8Array(base64String: string) {
     }
 
     return outputArray;
-}
-
-async function ensurePushSubscription() {
-    if (
-        typeof window === "undefined" ||
-        !("Notification" in window) ||
-        !("serviceWorker" in navigator)
-    ) {
-        return { ensured: false, reason: "unsupported" as const };
-    }
-
-    const permission = Notification.permission;
-    if (permission === "denied") {
-        return { ensured: false, reason: "denied" as const };
-    }
-
-    const registration = await navigator.serviceWorker.ready;
-    let nextPermission = permission;
-
-    if (nextPermission !== "granted") {
-        nextPermission = await Notification.requestPermission();
-    }
-
-    if (nextPermission !== "granted") {
-        return { ensured: false, reason: "not-granted" as const };
-    }
-
-    const existingSubscription =
-        await registration.pushManager.getSubscription();
-    if (existingSubscription) {
-        return { ensured: true, reason: "already-subscribed" as const };
-    }
-
-    const { publicKey } = await fetchJson<{ publicKey: string }>(
-        "/api/notifications/vapid-public-key",
-    );
-
-    if (!publicKey) {
-        return { ensured: false, reason: "missing-key" as const };
-    }
-
-    const createdSubscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
-    });
-
-    await fetchJson("/api/notifications/push-subscriptions", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify(
-            createdSubscription.toJSON() as PushSubscriptionPayload,
-        ),
-    });
-
-    return { ensured: true, reason: "subscribed" as const };
 }
 
 type RiderDashboardProps = {
@@ -482,7 +425,10 @@ export function RiderDashboard({
             );
 
             if (nextChecked) {
-                const pushResult = await ensurePushSubscription();
+                const pushResult = await ensureRiderPushSubscription(
+                    fetchJson,
+                    userId,
+                );
 
                 if (pushResult.reason === "denied") {
                     toast.warning(
@@ -787,40 +733,71 @@ export function RiderDashboard({
                             </div>
                         </>
                     ) : (
-                        <div className="flex h-full items-center justify-center p-6 text-center">
-                            <div>
-                                <Route className="mx-auto h-12 w-12 text-slate-400" />
-                                <p className="mt-3 font-semibold text-slate-800">
+                        <div className="flex h-full flex-col justify-between p-4">
+                            <div className="rounded-xl bg-white/95 p-4 text-left shadow">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                    Status operacional
+                                </p>
+                                <p className="mt-1 text-2xl font-bold text-slate-900">
+                                    {isOnline ? "Online" : "Offline"}
+                                </p>
+                                <p className="text-sm text-slate-500">
+                                    Ative seu status para receber chamadas em
+                                    tempo real.
+                                </p>
+                                <Button
+                                    type="button"
+                                    className={cn(
+                                        "mt-4 w-full h-12",
+                                        isOnline
+                                            ? "bg-slate-800 hover:bg-slate-900"
+                                            : "bg-emerald-600 hover:bg-emerald-700",
+                                    )}
+                                    disabled={
+                                        !isActiveRider || isChangingAvailability
+                                    }
+                                    onClick={() =>
+                                        void handleAvailabilityChange(!isOnline)
+                                    }
+                                >
+                                    {isChangingAvailability ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : null}
+                                    {isOnline
+                                        ? "Ficar offline"
+                                        : "Ficar online"}
+                                </Button>
+                            </div>
+                            <div className="rounded-xl bg-white p-1 shadow">
+                                <DailyStats
+                                    deliveriesCompleted={
+                                        dailyStats.deliveriesCompleted
+                                    }
+                                    totalEarnings={dailyStats.totalEarnings}
+                                    hoursActive={
+                                        (dailyStats.onlineSeconds +
+                                            (isOnline &&
+                                            onlineStartedAtRef.current
+                                                ? Math.floor(
+                                                      (Date.now() -
+                                                          onlineStartedAtRef.current) /
+                                                          1000,
+                                                  )
+                                                : 0)) /
+                                        3600
+                                    }
+                                    averageRating={4.9}
+                                />
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white/95 p-4 text-center shadow-sm">
+                                <Route className="mx-auto h-8 w-8 text-slate-400" />
+                                <p className="mt-2 font-semibold text-slate-800">
                                     Aguardando nova corrida
                                 </p>
                                 <p className="text-sm text-slate-500">
-                                    Fique online para receber chamadas.
+                                    Quando uma entrega chegar, o mapa entra em
+                                    foco total.
                                 </p>
-                                {!activeDelivery ? (
-                                    <div className="mt-4 rounded-xl bg-white/90 p-3 text-left shadow">
-                                        <DailyStats
-                                            deliveriesCompleted={
-                                                dailyStats.deliveriesCompleted
-                                            }
-                                            totalEarnings={
-                                                dailyStats.totalEarnings
-                                            }
-                                            hoursActive={
-                                                (dailyStats.onlineSeconds +
-                                                    (isOnline &&
-                                                    onlineStartedAtRef.current
-                                                        ? Math.floor(
-                                                              (Date.now() -
-                                                                  onlineStartedAtRef.current) /
-                                                                  1000,
-                                                          )
-                                                        : 0)) /
-                                                3600
-                                            }
-                                            averageRating={4.9}
-                                        />
-                                    </div>
-                                ) : null}
                             </div>
                         </div>
                     )}
