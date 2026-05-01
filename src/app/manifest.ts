@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
     return {
+        id: "zaply-rider",
         name: "Zaply Rider",
         short_name: "Zaply Rider",
         description: "App mobile do entregador Zaply.",
@@ -20,4 +21,3 @@ export default function manifest(): MetadataRoute.Manifest {
         ],
     };
 }
-
