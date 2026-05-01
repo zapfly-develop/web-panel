@@ -21,6 +21,7 @@ type OrdersKanbanBoardProps = {
     now: Date;
     creatingDeliveryOrderId: string | null;
     onCreateDelivery: (order: StoreOrder) => void;
+    onAssignRider: (delivery: StoreDelivery) => void;
     onOpenDetails: (order: StoreOrder) => void;
     onPrint: (order: StoreOrder) => void;
 };
@@ -33,6 +34,7 @@ export function OrdersKanbanBoard({
     now,
     creatingDeliveryOrderId,
     onCreateDelivery,
+    onAssignRider,
     onOpenDetails,
     onPrint,
     onDragEnd,
@@ -124,6 +126,9 @@ export function OrdersKanbanBoard({
                                                                         }
                                                                         onCreateDelivery={
                                                                             onCreateDelivery
+                                                                        }
+                                                                        onAssignRider={
+                                                                            onAssignRider
                                                                         }
                                                                         onOpenDetails={
                                                                             onOpenDetails

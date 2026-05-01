@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Navigation } from "lucide-react";
+import { Navigation, Route } from "lucide-react";
+import type { DeliveryStatus } from "../services/delivery-types";
 import { loadGoogleMaps } from "../../orders/services/google-maps-loader";
 
 type DeliveryMapProps = {
@@ -9,175 +10,449 @@ type DeliveryMapProps = {
     pickupLng?: number | null;
     destLat?: number | null;
     destLng?: number | null;
+    riderLat?: number | null;
+    riderLng?: number | null;
+    status?: DeliveryStatus | null;
     distanceKm?: number | null;
 };
+
+type LatLng = {
+    lat: number;
+    lng: number;
+};
+
+type RouteSegment = {
+    id: string;
+    origin: LatLng;
+    destination: LatLng;
+    color: string;
+    label: string;
+};
+
+type MapStatus = "idle" | "missing-key" | "loading" | "ready" | "error";
+
+const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+const BEFORE_PICKUP_STATUSES = new Set<DeliveryStatus>([
+    "ASSIGNED",
+    "ACCEPTED",
+]);
+
+const AFTER_PICKUP_STATUSES = new Set<DeliveryStatus>([
+    "PICKED_UP",
+    "IN_TRANSIT",
+    "ARRIVED_AT_DESTINATION",
+    "ABSENT_WAITING",
+]);
 
 export function DeliveryMap({
     pickupLat,
     pickupLng,
     destLat,
     destLng,
+    riderLat,
+    riderLng,
+    status,
     distanceKm,
 }: DeliveryMapProps) {
     const mapRef = useRef<HTMLDivElement | null>(null);
     const mapInstanceRef = useRef<google.maps.Map | null>(null);
-    const pickupMarkerRef = useRef<google.maps.Marker | null>(null);
-    const destMarkerRef = useRef<google.maps.Marker | null>(null);
-    const polylineRef = useRef<google.maps.Polyline | null>(null);
+    const markerRefs = useRef<google.maps.Marker[]>([]);
+    const rendererRefs = useRef<google.maps.DirectionsRenderer[]>([]);
+    const fallbackPolylineRefs = useRef<google.maps.Polyline[]>([]);
+    const [mapStatus, setMapStatus] = useState<MapStatus>(
+        googleMapsApiKey ? "idle" : "missing-key",
+    );
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-    const [isLoaded, setIsLoaded] = useState(false);
-
-    const center = useMemo(() => {
-        if (pickupLat && pickupLng) {
-            return { lat: pickupLat, lng: pickupLng };
-        }
-
-        if (destLat && destLng) {
-            return { lat: destLat, lng: destLng };
-        }
-
-        return { lat: -23.55052, lng: -46.633308 };
-    }, [pickupLat, pickupLng, destLat, destLng]);
+    const pickup = useMemo(
+        () => toLatLng(pickupLat, pickupLng),
+        [pickupLat, pickupLng],
+    );
+    const destination = useMemo(
+        () => toLatLng(destLat, destLng),
+        [destLat, destLng],
+    );
+    const rider = useMemo(
+        () => toLatLng(riderLat, riderLng),
+        [riderLat, riderLng],
+    );
+    const center = useMemo(
+        () =>
+            pickup ??
+            destination ??
+            rider ?? {
+                lat: -23.55052,
+                lng: -46.633308,
+            },
+        [destination, pickup, rider],
+    );
+    const routeSegments = useMemo(
+        () => buildRouteSegments({ pickup, destination, rider, status }),
+        [destination, pickup, rider, status],
+    );
 
     useEffect(() => {
+        const apiKey = googleMapsApiKey;
+
+        if (!apiKey) {
+            return;
+        }
+
         let mounted = true;
 
-        async function initMap() {
-            if (!mapRef.current) return;
+        async function initMap(apiKeyForRequest: string) {
+            if (!mapRef.current) {
+                return;
+            }
 
             try {
-                const google = await loadGoogleMaps(
-                    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!,
+                setMapStatus((current) =>
+                    current === "ready" ? "ready" : "loading",
                 );
+                setErrorMessage(null);
 
-                if (!mounted || !mapRef.current) return;
+                const google = await loadGoogleMaps(apiKeyForRequest);
 
-                const map = new google.maps.Map(mapRef.current, {
-                    center,
-                    zoom: 13,
-                    disableDefaultUI: true,
-                    zoomControl: false,
-                    streetViewControl: false,
-                    mapTypeControl: false,
-                    fullscreenControl: false,
-                    clickableIcons: false,
-                    keyboardShortcuts: false,
-                    gestureHandling: "greedy",
-                });
+                if (!mounted || !mapRef.current) {
+                    return;
+                }
 
-                mapInstanceRef.current = map;
-                setIsLoaded(true);
+                if (!mapInstanceRef.current) {
+                    mapInstanceRef.current = new google.maps.Map(mapRef.current, {
+                        center,
+                        zoom: 13,
+                        disableDefaultUI: true,
+                        zoomControl: true,
+                        streetViewControl: false,
+                        mapTypeControl: false,
+                        fullscreenControl: false,
+                        clickableIcons: false,
+                        keyboardShortcuts: false,
+                        gestureHandling: "greedy",
+                    });
+                }
+
+                setMapStatus("ready");
             } catch (error) {
-                console.error("Erro ao carregar Google Maps:", error);
+                if (!mounted) {
+                    return;
+                }
+
+                setMapStatus("error");
+                setErrorMessage(
+                    error instanceof Error
+                        ? error.message
+                        : "Nao foi possivel carregar Google Maps.",
+                );
             }
         }
 
-        initMap();
+        void initMap(apiKey);
 
         return () => {
             mounted = false;
         };
-    }, []);
+    }, [center]);
 
     useEffect(() => {
         const map = mapInstanceRef.current;
-        if (!map || !window.google?.maps) return;
-
         const google = window.google;
+        const markers = markerRefs.current;
+        const renderers = rendererRefs.current;
+        const fallbackPolylines = fallbackPolylineRefs.current;
 
+        if (!map || !google?.maps) {
+            return;
+        }
+
+        clearMapElements(markers, renderers, fallbackPolylines);
         map.setCenter(center);
 
-        if (pickupMarkerRef.current) pickupMarkerRef.current.setMap(null);
-        if (destMarkerRef.current) destMarkerRef.current.setMap(null);
-        if (polylineRef.current) polylineRef.current.setMap(null);
+        const visiblePoints = [rider, pickup, destination].filter(
+            (point): point is LatLng => Boolean(point),
+        );
 
-        if (pickupLat && pickupLng) {
-            pickupMarkerRef.current = new google.maps.Marker({
-                position: { lat: pickupLat, lng: pickupLng },
+        if (rider) {
+            markers.push(
+                createMarker(google, map, rider, "Você", "#0f172a", 3),
+            );
+        }
+
+        if (pickup) {
+            markers.push(
+                createMarker(google, map, pickup, "Loja", "#0ea5e9", 2),
+            );
+        }
+
+        if (destination) {
+            markers.push(
+                createMarker(google, map, destination, "Cliente", "#10b981", 1),
+            );
+        }
+
+        if (routeSegments.length > 0) {
+            void renderRouteSegments(
+                google,
                 map,
-                icon: {
-                    path: google.maps.SymbolPath.CIRCLE,
-                    scale: 8,
-                    fillColor: "#0ea5e9",
-                    fillOpacity: 1,
-                    strokeColor: "#ffffff",
-                    strokeWeight: 2,
-                },
-            });
+                routeSegments,
+                renderers,
+                fallbackPolylines,
+            );
         }
 
-        if (destLat && destLng) {
-            destMarkerRef.current = new google.maps.Marker({
-                position: { lat: destLat, lng: destLng },
-                map,
-                icon: {
-                    path: google.maps.SymbolPath.CIRCLE,
-                    scale: 8,
-                    fillColor: "#10b981",
-                    fillOpacity: 1,
-                    strokeColor: "#ffffff",
-                    strokeWeight: 2,
-                },
-            });
-        }
+        fitMap(google, map, visiblePoints);
 
-        if (pickupLat && pickupLng && destLat && destLng) {
-            const path = [
-                { lat: pickupLat, lng: pickupLng },
-                { lat: destLat, lng: destLng },
-            ];
-
-            polylineRef.current = new google.maps.Polyline({
-                path,
-                geodesic: true,
-                strokeColor: "#0f172a",
-                strokeOpacity: 0.8,
-                strokeWeight: 4,
-            });
-
-            polylineRef.current.setMap(map);
-
-            const bounds = new google.maps.LatLngBounds();
-            bounds.extend(path[0]);
-            bounds.extend(path[1]);
-            map.fitBounds(bounds, 80);
-        }
-    }, [center, pickupLat, pickupLng, destLat, destLng]);
+        return () => clearMapElements(markers, renderers, fallbackPolylines);
+    }, [center, destination, pickup, rider, routeSegments]);
 
     return (
         <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
             <div className="relative aspect-[16/10] bg-slate-100">
-                {!isLoaded && (
-                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
-                        <div className="text-center">
+                <div ref={mapRef} className="h-full w-full" />
+                {mapStatus !== "ready" ? (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-4 text-center">
+                        <div>
                             <Navigation className="mx-auto h-12 w-12 text-slate-400" />
-                            <p className="mt-2 text-sm font-medium text-slate-600">
-                                Carregando mapa
+                            <p className="mt-2 text-sm font-medium text-slate-700">
+                                {getOverlayTitle(mapStatus)}
                             </p>
-                            <p className="text-xs text-slate-500">
-                                {distanceKm
-                                    ? `${distanceKm.toFixed(1)} km`
-                                    : "Calculando..."}
+                            <p className="mt-1 text-xs text-slate-500">
+                                {errorMessage ||
+                                    (distanceKm
+                                        ? `${distanceKm.toFixed(1)} km estimados`
+                                        : "Preparando rota")}
                             </p>
                         </div>
                     </div>
-                )}
-
-                <div ref={mapRef} className="h-full w-full" />
+                ) : null}
             </div>
 
-            <div className="p-4">
-                <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                        <div className="h-3 w-3 rounded-full bg-sky-500" />
-                        <span className="text-slate-600">Origem</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-slate-600">Destino</span>
-                        <div className="h-3 w-3 rounded-full bg-emerald-500" />
-                    </div>
+            <div className="grid gap-2 p-4 text-xs text-slate-600">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <LegendItem color="#0f172a" label="Você" />
+                    <LegendItem color="#0ea5e9" label="Loja" />
+                    <LegendItem color="#10b981" label="Cliente" />
+                </div>
+                <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
+                    <Route className="h-3.5 w-3.5 text-slate-400" />
+                    <span>{getRouteSummary(status, Boolean(rider))}</span>
                 </div>
             </div>
         </div>
     );
+}
+
+function LegendItem({ color, label }: { color: string; label: string }) {
+    return (
+        <div className="flex items-center gap-2">
+            <span
+                className="h-3 w-3 rounded-full"
+                style={{ backgroundColor: color }}
+            />
+            <span>{label}</span>
+        </div>
+    );
+}
+
+function toLatLng(
+    latitude?: number | null,
+    longitude?: number | null,
+): LatLng | null {
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return null;
+    }
+
+    return { lat, lng };
+}
+
+function buildRouteSegments(input: {
+    pickup: LatLng | null;
+    destination: LatLng | null;
+    rider: LatLng | null;
+    status?: DeliveryStatus | null;
+}): RouteSegment[] {
+    const { pickup, destination, rider, status } = input;
+    const segments: RouteSegment[] = [];
+
+    if (rider && pickup && status === "RETURNING_TO_MERCHANT") {
+        return [
+            {
+                id: "return-to-store",
+                origin: rider,
+                destination: pickup,
+                color: "#f97316",
+                label: "Retorno para loja",
+            },
+        ];
+    }
+
+    if (rider && pickup && (!status || BEFORE_PICKUP_STATUSES.has(status))) {
+        segments.push({
+            id: "rider-to-store",
+            origin: rider,
+            destination: pickup,
+            color: "#0ea5e9",
+            label: "Rider ate a loja",
+        });
+    }
+
+    if (rider && destination && status && AFTER_PICKUP_STATUSES.has(status)) {
+        segments.push({
+            id: "rider-to-customer",
+            origin: rider,
+            destination,
+            color: "#10b981",
+            label: "Rider ate o cliente",
+        });
+    } else if (pickup && destination) {
+        segments.push({
+            id: "store-to-customer",
+            origin: pickup,
+            destination,
+            color: "#10b981",
+            label: "Loja ate o cliente",
+        });
+    }
+
+    return segments;
+}
+
+async function renderRouteSegments(
+    google: typeof window.google,
+    map: google.maps.Map,
+    segments: RouteSegment[],
+    renderers: google.maps.DirectionsRenderer[],
+    fallbackPolylines: google.maps.Polyline[],
+) {
+    const directionsService = new google.maps.DirectionsService();
+
+    await Promise.all(
+        segments.map(async (segment) => {
+            try {
+                const result = await directionsService.route({
+                    origin: segment.origin,
+                    destination: segment.destination,
+                    travelMode: google.maps.TravelMode.DRIVING,
+                });
+                const renderer = new google.maps.DirectionsRenderer({
+                    map,
+                    directions: result,
+                    suppressMarkers: true,
+                    preserveViewport: true,
+                    polylineOptions: {
+                        strokeColor: segment.color,
+                        strokeOpacity: 0.9,
+                        strokeWeight: 5,
+                    },
+                });
+
+                renderers.push(renderer);
+            } catch {
+                fallbackPolylines.push(
+                    new google.maps.Polyline({
+                        map,
+                        path: [segment.origin, segment.destination],
+                        geodesic: true,
+                        strokeColor: segment.color,
+                        strokeOpacity: 0.75,
+                        strokeWeight: 4,
+                    }),
+                );
+            }
+        }),
+    );
+}
+
+function createMarker(
+    google: typeof window.google,
+    map: google.maps.Map,
+    position: LatLng,
+    title: string,
+    color: string,
+    zIndex: number,
+) {
+    return new google.maps.Marker({
+        map,
+        position,
+        title,
+        zIndex,
+        icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: color,
+            fillOpacity: 1,
+            strokeColor: "#ffffff",
+            strokeWeight: 2,
+        },
+    });
+}
+
+function fitMap(
+    google: typeof window.google,
+    map: google.maps.Map,
+    points: LatLng[],
+) {
+    if (points.length === 0) {
+        return;
+    }
+
+    if (points.length === 1) {
+        map.setCenter(points[0]);
+        map.setZoom(15);
+        return;
+    }
+
+    const bounds = new google.maps.LatLngBounds();
+    points.forEach((point) => bounds.extend(point));
+    map.fitBounds(bounds, 64);
+}
+
+function clearMapElements(
+    markers: google.maps.Marker[],
+    renderers: google.maps.DirectionsRenderer[],
+    fallbackPolylines: google.maps.Polyline[],
+) {
+    markers.forEach((marker) => marker.setMap(null));
+    markers.length = 0;
+
+    renderers.forEach((renderer) => renderer.setMap(null));
+    renderers.length = 0;
+
+    fallbackPolylines.forEach((polyline) => polyline.setMap(null));
+    fallbackPolylines.length = 0;
+}
+
+function getOverlayTitle(status: MapStatus) {
+    if (status === "missing-key") {
+        return "Google Maps sem chave";
+    }
+
+    if (status === "error") {
+        return "Mapa indisponivel";
+    }
+
+    return "Carregando mapa";
+}
+
+function getRouteSummary(
+    status: DeliveryStatus | null | undefined,
+    hasRiderLocation: boolean,
+) {
+    if (status === "RETURNING_TO_MERCHANT") {
+        return "Rota de retorno para a loja.";
+    }
+
+    if (status && AFTER_PICKUP_STATUSES.has(status)) {
+        return hasRiderLocation
+            ? "Rota atual ate o cliente."
+            : "Rota planejada da loja ate o cliente.";
+    }
+
+    return hasRiderLocation
+        ? "Rota para retirar na loja e rota planejada de entrega."
+        : "Rota planejada da loja ate o cliente.";
 }

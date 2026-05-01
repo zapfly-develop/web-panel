@@ -25,7 +25,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
                     const user = await prisma.user.findUnique({
                         where: { email: credentials.email as string },
-                        include: { subscription: true },
+                        include: {
+                            subscription: true,
+                            riderProfile: {
+                                select: {
+                                    id: true,
+                                    status: true,
+                                },
+                            },
+                        },
                     });
 
                     if (!user) {
@@ -57,6 +65,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         planType: access.planType,
                         subscriptionStatus: user.subscription?.status ?? null,
                         hasActiveAccess: access.hasActiveAccess,
+                        isRider: Boolean(user.riderProfile),
+                        riderStatus: user.riderProfile?.status ?? null,
                     };
                 } catch (error) {
                     console.error("Erro ao autorizar usuário:", error);
@@ -92,7 +102,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
             const dbUser = await prisma.user.findUnique({
                 where: { id: userId },
-                include: { subscription: true },
+                include: {
+                    subscription: true,
+                    riderProfile: {
+                        select: {
+                            id: true,
+                            status: true,
+                        },
+                    },
+                },
             });
 
             if (!dbUser) {
@@ -115,6 +133,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             token.subscriptionStatus = dbUser.subscription?.status ?? null;
             token.hasActiveAccess = access.hasActiveAccess;
             token.isSuperAdmin = access.isSuperAdmin;
+            token.isRider = Boolean(dbUser.riderProfile);
+            token.riderStatus = dbUser.riderProfile?.status ?? null;
 
             return token;
         },
@@ -127,6 +147,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 session.user.subscriptionStatus = token.subscriptionStatus;
                 session.user.hasActiveAccess = Boolean(token.hasActiveAccess);
                 session.user.isSuperAdmin = Boolean(token.isSuperAdmin);
+                session.user.isRider = Boolean(token.isRider);
+                session.user.riderStatus = token.riderStatus;
             }
 
             return session;

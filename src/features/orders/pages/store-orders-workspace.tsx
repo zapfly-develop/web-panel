@@ -27,6 +27,7 @@ import {
     matchesOrderFilters,
     sortOrders,
 } from "../services/order-utils";
+import { RiderAssignmentDialog } from "@/features/delivery/components/rider-assignment-dialog";
 import { OrderDetailsDialog } from "../components/order-details-dialog";
 import { OrdersCardView } from "../components/orders-card-view";
 import { OrdersFilterBar } from "../components/orders-filter-bar";
@@ -66,6 +67,8 @@ export function StoreOrdersWorkspace({
     const [creatingDeliveryOrderId, setCreatingDeliveryOrderId] =
         useState<string | null>(null);
     const [selectedOrder, setSelectedOrder] = useState<StoreOrder | null>(null);
+    const [selectedDeliveryForAssignment, setSelectedDeliveryForAssignment] =
+        useState<StoreDelivery | null>(null);
     const [now, setNow] = useState(() => new Date());
 
     useEffect(() => {
@@ -263,6 +266,29 @@ export function StoreOrdersWorkspace({
         ? getDeliveryForOrder(deliveriesByOrderId, selectedOrder.id)
         : null;
 
+    function handleRiderAssigned(
+        updatedDelivery: Partial<StoreDelivery> & { id: string },
+        rider: DeliveryRider,
+    ) {
+        setDeliveries((currentDeliveries) =>
+            currentDeliveries.map((delivery) => {
+                if (delivery.id !== updatedDelivery.id) {
+                    return delivery;
+                }
+
+                return {
+                    ...delivery,
+                    ...updatedDelivery,
+                    status: updatedDelivery.status ?? "ASSIGNED",
+                    riderId: updatedDelivery.riderId ?? rider.id,
+                    rider: updatedDelivery.rider ?? rider,
+                    updatedAt:
+                        updatedDelivery.updatedAt ?? new Date().toISOString(),
+                };
+            }),
+        );
+    }
+
     async function handleCreateDelivery(order: StoreOrder) {
         try {
             setCreatingDeliveryOrderId(order.id);
@@ -285,8 +311,8 @@ export function StoreOrdersWorkspace({
                 );
             }
 
+            const incomingDelivery = payload as StoreDelivery;
             setDeliveries((currentDeliveries) => {
-                const incomingDelivery = payload as StoreDelivery;
                 const remainingDeliveries = currentDeliveries.filter(
                     (delivery) => delivery.id !== incomingDelivery.id,
                 );
@@ -294,7 +320,8 @@ export function StoreOrdersWorkspace({
                 return [incomingDelivery, ...remainingDeliveries];
             });
 
-            toast.success("Entrega criada. Atribua um rider em Entregas.");
+            toast.success("Entrega criada. Selecione um entregador.");
+            setSelectedDeliveryForAssignment(incomingDelivery);
         } catch (error) {
             toast.error(
                 error instanceof Error
@@ -431,6 +458,7 @@ export function StoreOrdersWorkspace({
                     now={now}
                     creatingDeliveryOrderId={creatingDeliveryOrderId}
                     onCreateDelivery={(order) => void handleCreateDelivery(order)}
+                    onAssignRider={setSelectedDeliveryForAssignment}
                     onOpenDetails={setSelectedOrder}
                     onPrint={handlePrint}
                     onDragEnd={handleDragEnd}
@@ -442,6 +470,7 @@ export function StoreOrdersWorkspace({
                     now={now}
                     creatingDeliveryOrderId={creatingDeliveryOrderId}
                     onCreateDelivery={(order) => void handleCreateDelivery(order)}
+                    onAssignRider={setSelectedDeliveryForAssignment}
                     onOpenDetails={setSelectedOrder}
                     onPrint={handlePrint}
                 />
@@ -452,6 +481,7 @@ export function StoreOrdersWorkspace({
                     now={now}
                     creatingDeliveryOrderId={creatingDeliveryOrderId}
                     onCreateDelivery={(order) => void handleCreateDelivery(order)}
+                    onAssignRider={setSelectedDeliveryForAssignment}
                     onOpenDetails={setSelectedOrder}
                     onPrint={handlePrint}
                 />
@@ -466,6 +496,18 @@ export function StoreOrdersWorkspace({
                         setSelectedOrder(null);
                     }
                 }}
+                onAssignRider={setSelectedDeliveryForAssignment}
+            />
+
+            <RiderAssignmentDialog
+                delivery={selectedDeliveryForAssignment}
+                open={Boolean(selectedDeliveryForAssignment)}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setSelectedDeliveryForAssignment(null);
+                    }
+                }}
+                onAssigned={handleRiderAssigned}
             />
         </div>
     );

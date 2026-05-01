@@ -60,6 +60,7 @@ export function useRiderLocation({
         }
 
         let isMounted = true;
+        let lastPosition: GeolocationPosition | null = null;
 
         async function sendLocation(payload: RiderLocationPayload) {
             const response = await fetch("/api/delivery/rider/location", {
@@ -81,54 +82,57 @@ export function useRiderLocation({
             }
         }
 
-        const watchId = navigator.geolocation.watchPosition(
-            (position) => {
-                const now = Date.now();
+        const handlePositionUpdate = (position: GeolocationPosition) => {
+            lastPosition = position;
+            const now = Date.now();
 
-                if (now - lastSentAtRef.current < minIntervalMs) {
-                    return;
-                }
+            if (now - lastSentAtRef.current < minIntervalMs) {
+                return;
+            }
 
-                lastSentAtRef.current = now;
-                const recordedAt = new Date().toISOString();
-                const payload: RiderLocationPayload = {
-                    ...(deliveryId ? { deliveryId } : {}),
-                    latitude: position.coords.latitude,
-                    longitude: position.coords.longitude,
-                    accuracyMeters: Number.isFinite(position.coords.accuracy)
-                        ? position.coords.accuracy
-                        : null,
-                    recordedAt,
-                };
+            lastSentAtRef.current = now;
+            const recordedAt = new Date().toISOString();
+            const payload: RiderLocationPayload = {
+                ...(deliveryId ? { deliveryId } : {}),
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracyMeters: Number.isFinite(position.coords.accuracy)
+                    ? position.coords.accuracy
+                    : null,
+                recordedAt,
+            };
 
-                void sendLocation(payload)
-                    .then(() => {
-                        if (!isMounted) {
-                            return;
-                        }
+            void sendLocation(payload)
+                .then(() => {
+                    if (!isMounted) {
+                        return;
+                    }
 
-                        setState("active");
-                        setErrorMessage(null);
-                        setLastLocation({
-                            latitude: payload.latitude,
-                            longitude: payload.longitude,
-                            accuracyMeters: payload.accuracyMeters ?? null,
-                            sentAt: recordedAt,
-                        });
-                    })
-                    .catch((error) => {
-                        if (!isMounted) {
-                            return;
-                        }
-
-                        setState("error");
-                        setErrorMessage(
-                            error instanceof Error
-                                ? error.message
-                                : "Falha ao enviar localizacao.",
-                        );
+                    setState("active");
+                    setErrorMessage(null);
+                    setLastLocation({
+                        latitude: payload.latitude,
+                        longitude: payload.longitude,
+                        accuracyMeters: payload.accuracyMeters ?? null,
+                        sentAt: recordedAt,
                     });
-            },
+                })
+                .catch((error) => {
+                    if (!isMounted) {
+                        return;
+                    }
+
+                    setState("error");
+                    setErrorMessage(
+                        error instanceof Error
+                            ? error.message
+                            : "Falha ao enviar localizacao.",
+                    );
+                });
+        };
+
+        const watchId = navigator.geolocation.watchPosition(
+            handlePositionUpdate,
             (error) => {
                 if (!isMounted) {
                     return;
@@ -144,9 +148,17 @@ export function useRiderLocation({
             },
         );
 
+        // Periodic update fallback - ensures location is sent even if rider is stationary
+        const intervalId = window.setInterval(() => {
+            if (lastPosition && isMounted) {
+                handlePositionUpdate(lastPosition);
+            }
+        }, Math.max(minIntervalMs, 30000));
+
         return () => {
             isMounted = false;
             navigator.geolocation.clearWatch(watchId);
+            window.clearInterval(intervalId);
         };
     }, [deliveryId, enabled, minIntervalMs]);
 

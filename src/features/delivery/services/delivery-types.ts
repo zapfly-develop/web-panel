@@ -1,5 +1,7 @@
 export type DeliveryStatus =
     | "WAITING_RIDER"
+    | "READY_FOR_PICKUP"
+    | "INCIDENT_REPORTED"
     | "DELIVERY_STAGNATED"
     | "PENDING_ASSIGNMENT"
     | "ASSIGNED"
@@ -97,7 +99,7 @@ export type DeliveryPayoutSummary = {
     riderProfitCents: number;
     storeDebitCents: number;
     riderRetainedCents: number;
-    settlementType: "STORE_DEBIT" | "RIDER_RETAINED";
+    settlementType: "STORE_DEBIT" | "RIDER_RETAINED" | "FLOOVI_SAFETY_FUND";
     currency: string;
     status: DeliveryPayoutStatus;
     processedAt: string | null;
@@ -156,6 +158,8 @@ export type StoreDelivery = {
     distanceMeters: number | null;
     quotedPriceCents: number;
     riderPayoutCents: number;
+    bonusValueCents: number;
+    isHighPriority: boolean;
     currency: string;
     pickupAddress: string | null;
     pickupLatitude: number | null;
@@ -224,6 +228,11 @@ export type RiderNewAvailableDeliveryEvent = {
     riderUserIds?: string[];
     pickupLatitude?: number | null;
     pickupLongitude?: number | null;
+    quotedPriceCents?: number;
+    riderPayoutCents?: number;
+    bonusValueCents?: number;
+    isHighPriority?: boolean;
+    priorityLabel?: string;
     radiusKm?: number;
     limit?: number;
     timestamp: string;

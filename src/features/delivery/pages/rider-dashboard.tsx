@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     AlertCircle,
@@ -52,7 +53,9 @@ import { useDeliveryRealtime } from "../hooks/use-delivery-realtime";
 import { useRiderLocation } from "../hooks/use-rider-location";
 import { useDeliveryContingencies } from "../hooks/use-delivery-contingencies";
 import type {
+    DeliveryAssignedEvent,
     DeliveryRider,
+    RiderNewAvailableDeliveryEvent,
     DeliveryStatusChangedEvent,
     StoreDelivery,
 } from "../services/delivery-types";
@@ -62,7 +65,7 @@ import {
 } from "../services/delivery-api";
 import {
     DailyStats,
-    DeliveryMapPlaceholder,
+    DeliveryTimeline,
 } from "../components/optional-components";
 import { DeliveryMap } from "../components/delivery-map";
 
@@ -74,6 +77,10 @@ type RiderDashboardProps = {
 };
 
 type DeliveryAction = "accept" | "pick-up" | "complete" | "incident" | "absent";
+type DeliveryActionPayload = {
+    reason?: string;
+    description?: string;
+};
 
 function formatTime(value: string) {
     return new Intl.DateTimeFormat("pt-BR", {
@@ -88,20 +95,11 @@ function formatMoney(valueCents: number, currency = "BRL") {
     }).format(valueCents / 100);
 }
 
-function formatDistance(distanceMeters: number | null) {
-    if (!distanceMeters || distanceMeters <= 0) {
-        return "Sem distância";
-    }
-
-    if (distanceMeters < 1000) {
-        return `${distanceMeters} m`;
-    }
-
-    return `${(distanceMeters / 1000).toFixed(1)} km`;
-}
-
 function isOperationallyOnline(profile: DeliveryRider | null) {
-    return profile?.availabilityStatus === "AVAILABLE";
+    return (
+        profile?.availabilityStatus === "AVAILABLE" ||
+        profile?.availabilityStatus === "BUSY"
+    );
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -142,6 +140,8 @@ export function RiderDashboard({
     const [isIncidentDialogOpen, setIsIncidentDialogOpen] = useState(false);
     const [incidentReason, setIncidentReason] = useState("");
     const [incidentDescription, setIncidentDescription] = useState("");
+    const [availableOffer, setAvailableOffer] =
+        useState<RiderNewAvailableDeliveryEvent | null>(null);
 
     const isActiveRider = profile?.status === "ACTIVE";
     const isOnline = isOperationallyOnline(profile);
@@ -187,11 +187,50 @@ export function RiderDashboard({
         [profile, refreshActiveDelivery, refreshProfile],
     );
 
+    const handleDeliveryAssigned = useCallback(
+        (event: DeliveryAssignedEvent) => {
+            setAvailableOffer((currentOffer) =>
+                currentOffer?.deliveryId === event.deliveryId
+                    ? null
+                    : currentOffer,
+            );
+            void refreshActiveDelivery();
+        },
+        [refreshActiveDelivery],
+    );
+
+    const handleAvailableDelivery = useCallback(
+        (event: RiderNewAvailableDeliveryEvent) => {
+            if (
+                event.riderUserIds?.length &&
+                !event.riderUserIds.includes(userId)
+            ) {
+                return;
+            }
+
+            setAvailableOffer(event);
+
+            toast.info(
+                event.isHighPriority
+                    ? "Entrega prioritária disponível"
+                    : "Nova entrega disponível",
+                {
+                    description: event.riderPayoutCents
+                        ? `Repasse previsto: ${formatMoney(event.riderPayoutCents)}`
+                        : "A corrida entrou na fila próxima a você.",
+                    duration: 10000,
+                },
+            );
+        },
+        [userId],
+    );
+
     const realtime = useDeliveryRealtime({
         userId,
         enabled: Boolean(profile),
-        onDeliveryAssigned: () => void refreshActiveDelivery(),
+        onDeliveryAssigned: handleDeliveryAssigned,
         onDeliveryStatusChanged: handleDeliveryStatusChanged,
+        onRiderNewAvailableDelivery: handleAvailableDelivery,
         onRiderStatusChanged: () => void refreshProfile(),
         onCustomerResponded: (event) => {
             toast.info(event.message, {
@@ -199,7 +238,7 @@ export function RiderDashboard({
                 duration: 10000,
             });
         },
-        onRiderStalledWarning: (event) => {
+        onRiderStalledWarning: () => {
             toast.warning("Você está a caminho?", {
                 description:
                     "Notamos que você não se moveu em direção à loja. Reporte um incidente se houver problemas.",
@@ -232,6 +271,12 @@ export function RiderDashboard({
         enabled: Boolean(isOnline && isActiveRider),
         deliveryId: activeDeliveryId,
     });
+
+    useEffect(() => {
+        if (activeDelivery) {
+            setAvailableOffer(null);
+        }
+    }, [activeDelivery]);
 
     const statusCopy = useMemo(() => {
         if (!profile) {
@@ -309,7 +354,7 @@ export function RiderDashboard({
 
     async function runDeliveryAction(
         action: DeliveryAction,
-        payload?: Record<string, any>,
+        payload?: DeliveryActionPayload,
     ) {
         if (!activeDelivery) {
             return;
@@ -333,7 +378,11 @@ export function RiderDashboard({
                     payload as { reason: string; description?: string },
                 );
             } else if (action === "absent") {
-                await reportClientAbsent(userId, activeDelivery.id, payload);
+                await reportClientAbsent(
+                    userId,
+                    activeDelivery.id,
+                    payload ? { description: payload.description } : undefined,
+                );
             } else {
                 await fetchJson(
                     `/api/delivery/rider/deliveries/${activeDelivery.id}/${action}`,
@@ -403,12 +452,21 @@ export function RiderDashboard({
         activeDelivery?.status === "IN_TRANSIT" ||
         activeDelivery?.status === "ARRIVED_AT_DESTINATION";
 
-    const canReportAbsent =
-        activeDelivery?.status === "ARRIVED_AT_DESTINATION";
+    const canReportAbsent = activeDelivery?.status === "ARRIVED_AT_DESTINATION";
     const customerLabel =
         activeDelivery?.order.customerName ||
         activeDelivery?.order.customerWhatsappId ||
         "Cliente";
+    const riderLatitude =
+        location.lastLocation?.latitude ??
+        profile.location?.latitude ??
+        profile.currentLatitude ??
+        null;
+    const riderLongitude =
+        location.lastLocation?.longitude ??
+        profile.location?.longitude ??
+        profile.currentLongitude ??
+        null;
 
     return (
         <main className="relative min-h-dvh bg-gradient-to-b from-slate-50 to-slate-100 pb-20">
@@ -604,7 +662,10 @@ export function RiderDashboard({
                 {/* Cooldown Alert */}
                 {profile.incidentBlockedUntil &&
                 new Date(profile.incidentBlockedUntil) > new Date() ? (
-                    <Alert variant="destructive" className="rounded-2xl shadow-md">
+                    <Alert
+                        variant="destructive"
+                        className="rounded-2xl shadow-md"
+                    >
                         <Clock3 className="h-4 w-4" />
                         <AlertTitle>Bloqueio Temporário</AlertTitle>
                         <AlertDescription>
@@ -640,144 +701,279 @@ export function RiderDashboard({
 
                     {activeDelivery ? (
                         <>
-                        {activeDelivery.status === "ABSENT_WAITING" && (
-                            <div className="bg-amber-50 p-4 border-b border-amber-100">
-                                <div className="flex items-center justify-between text-amber-800">
-                                    <div className="flex items-center gap-2">
-                                        <Clock3 className="h-5 w-5 animate-pulse" />
-                                        <span className="font-bold">Aguardando cliente no local</span>
+                            {activeDelivery.status === "ABSENT_WAITING" && (
+                                <div className="bg-amber-50 p-4 border-b border-amber-100">
+                                    <div className="flex items-center justify-between text-amber-800">
+                                        <div className="flex items-center gap-2">
+                                            <Clock3 className="h-5 w-5 animate-pulse" />
+                                            <span className="font-bold">
+                                                Aguardando cliente no local
+                                            </span>
+                                        </div>
+                                        <span className="text-xl font-mono font-bold">
+                                            {contingencies.formattedTimeLeft ||
+                                                "0:00"}
+                                        </span>
                                     </div>
-                                    <span className="text-xl font-mono font-bold">
-                                        {contingencies.formattedTimeLeft || "0:00"}
-                                    </span>
+                                    <p className="mt-1 text-xs text-amber-700">
+                                        O cliente foi notificado. Por favor,
+                                        aguarde o tempo de segurança.
+                                    </p>
                                 </div>
-                                <p className="mt-1 text-xs text-amber-700">
-                                    O cliente foi notificado. Por favor, aguarde o tempo de segurança.
-                                </p>
-                            </div>
-                        )}
+                            )}
 
-                        {activeDelivery.status === "RETURNING_TO_MERCHANT" && (
-                            <div className="bg-red-50 p-4 border-b border-red-100">
-                                <div className="flex items-center gap-2 text-red-800">
-                                    <RefreshCw className="h-5 w-5" />
-                                    <span className="font-bold">Retornar para a loja</span>
+                            {activeDelivery.status ===
+                                "RETURNING_TO_MERCHANT" && (
+                                <div className="bg-red-50 p-4 border-b border-red-100">
+                                    <div className="flex items-center gap-2 text-red-800">
+                                        <RefreshCw className="h-5 w-5" />
+                                        <span className="font-bold">
+                                            Retornar para a loja
+                                        </span>
+                                    </div>
+                                    <p className="mt-1 text-xs text-red-700">
+                                        Tempo de espera esgotado. Por favor,
+                                        devolva o pacote na loja.
+                                    </p>
                                 </div>
-                                <p className="mt-1 text-xs text-red-700">
-                                    Tempo de espera esgotado. Por favor, devolva o pacote na loja.
-                                </p>
-                            </div>
-                        )}
+                            )}
 
-                        <DeliveryMap
-                            pickupLat={activeDelivery.pickupLatitude}
-                            pickupLng={activeDelivery.pickupLongitude}
-                            destLat={activeDelivery.destinationLatitude}
-                            destLng={activeDelivery.destinationLongitude}
-                            distanceKm={
-                                activeDelivery.distanceMeters
-                                    ? activeDelivery.distanceMeters / 1000
-                                    : undefined
-                            }
-                        />
+                            <DeliveryMap
+                                pickupLat={activeDelivery.pickupLatitude}
+                                pickupLng={activeDelivery.pickupLongitude}
+                                destLat={activeDelivery.destinationLatitude}
+                                destLng={activeDelivery.destinationLongitude}
+                                riderLat={riderLatitude}
+                                riderLng={riderLongitude}
+                                status={activeDelivery.status}
+                                distanceKm={
+                                    activeDelivery.distanceMeters
+                                        ? activeDelivery.distanceMeters / 1000
+                                        : undefined
+                                }
+                            />
 
-                        <div className="p-4 space-y-3">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h3 className="font-bold text-slate-900">{customerLabel}</h3>
-                                    <p className="text-sm text-slate-500">{activeDelivery.destinationAddress}</p>
+                            <DeliveryTimeline
+                                currentStatus={activeDelivery.status}
+                                acceptedAt={activeDelivery.acceptedAt}
+                                deliveredAt={activeDelivery.deliveredAt}
+                                key={`delyvery-timeline-component`}
+                                pickedUpAt={activeDelivery.pickedUpAt}
+                            />
+
+                            <div className="p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h3 className="font-bold text-slate-900">
+                                            {customerLabel}
+                                        </h3>
+                                        <p className="text-sm text-slate-500">
+                                            {activeDelivery.destinationAddress}
+                                        </p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            size="icon"
+                                            variant="outline"
+                                            className="rounded-full"
+                                        >
+                                            <Phone className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            size="icon"
+                                            variant="outline"
+                                            className="rounded-full"
+                                        >
+                                            <MessageSquare className="h-4 w-4" />
+                                        </Button>
+                                    </div>
                                 </div>
-                                <div className="flex gap-2">
-                                    <Button size="icon" variant="outline" className="rounded-full">
-                                        <Phone className="h-4 w-4" />
-                                    </Button>
-                                    <Button size="icon" variant="outline" className="rounded-full">
-                                        <MessageSquare className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                            </div>
 
-                            <div className="pt-2 flex flex-wrap gap-2">
-                                {canAccept && (
-                                    <Button
-                                        className="flex-1 bg-sky-600 hover:bg-sky-700"
-                                        onClick={() => runDeliveryAction("accept")}
-                                        disabled={!!runningAction}
-                                    >
-                                        {runningAction === "accept" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                                        Aceitar Corrida
-                                    </Button>
-                                )}
+                                <div className="pt-2 flex flex-wrap gap-2">
+                                    {canAccept && (
+                                        <Button
+                                            className="flex-1 bg-sky-600 hover:bg-sky-700"
+                                            onClick={() =>
+                                                runDeliveryAction("accept")
+                                            }
+                                            disabled={!!runningAction}
+                                        >
+                                            {runningAction === "accept" ? (
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            ) : (
+                                                <CheckCircle2 className="mr-2 h-4 w-4" />
+                                            )}
+                                            Aceitar Corrida
+                                        </Button>
+                                    )}
 
-                                {canPickUp && (
-                                    <Button
-                                        className="flex-1 bg-amber-600 hover:bg-amber-700"
-                                        onClick={() => runDeliveryAction("pick-up")}
-                                        disabled={!!runningAction}
-                                    >
-                                        {runningAction === "pick-up" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PackageCheck className="mr-2 h-4 w-4" />}
-                                        Coletar Pedido
-                                    </Button>
-                                )}
+                                    {canPickUp && (
+                                        <Button
+                                            className="flex-1 bg-amber-600 hover:bg-amber-700"
+                                            onClick={() =>
+                                                runDeliveryAction("pick-up")
+                                            }
+                                            disabled={!!runningAction}
+                                        >
+                                            {runningAction === "pick-up" ? (
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            ) : (
+                                                <PackageCheck className="mr-2 h-4 w-4" />
+                                            )}
+                                            Coletar Pedido
+                                        </Button>
+                                    )}
 
-                                {canComplete && (
-                                    <Button
-                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                                        onClick={() => runDeliveryAction("complete")}
-                                        disabled={!!runningAction || activeDelivery.status === "ABSENT_WAITING"}
-                                    >
-                                        {runningAction === "complete" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                                        Finalizar Entrega
-                                    </Button>
-                                )}
+                                    {canComplete && (
+                                        <Button
+                                            className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                                            onClick={() =>
+                                                runDeliveryAction("complete")
+                                            }
+                                            disabled={
+                                                !!runningAction ||
+                                                activeDelivery.status ===
+                                                    "ABSENT_WAITING"
+                                            }
+                                        >
+                                            {runningAction === "complete" ? (
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            ) : (
+                                                <CheckCircle2 className="mr-2 h-4 w-4" />
+                                            )}
+                                            Finalizar Entrega
+                                        </Button>
+                                    )}
 
-                                {canReportAbsent && (
-                                    <AlertDialog>
-                                        <AlertDialogTrigger asChild>
-                                            <Button
-                                                variant="outline"
-                                                className="flex-1 border-amber-200 text-amber-700 hover:bg-amber-50"
-                                                disabled={!!runningAction}
-                                            >
-                                                <Clock3 className="mr-2 h-4 w-4" />
-                                                Cliente Ausente
-                                            </Button>
-                                        </AlertDialogTrigger>
-                                        <AlertDialogContent>
-                                            <AlertDialogHeader>
-                                                <AlertDialogTitle>Reportar Cliente Ausente?</AlertDialogTitle>
-                                                <AlertDialogDescription>
-                                                    Isso iniciará um cronômetro de 5 minutos. Você deve aguardar no local.
-                                                    O cliente será notificado via WhatsApp.
-                                                </AlertDialogDescription>
-                                            </AlertDialogHeader>
-                                            <AlertDialogFooter>
-                                                <AlertDialogCancel>Voltar</AlertDialogCancel>
-                                                <AlertDialogAction
-                                                    className="bg-amber-600 hover:bg-amber-700"
-                                                    onClick={() => runDeliveryAction("absent")}
+                                    {canReportAbsent && (
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button
+                                                    variant="outline"
+                                                    className="flex-1 border-amber-200 text-amber-700 hover:bg-amber-50"
+                                                    disabled={!!runningAction}
                                                 >
-                                                    Confirmar Ausência
-                                                </AlertDialogAction>
-                                            </AlertDialogFooter>
-                                        </AlertDialogContent>
-                                    </AlertDialog>
-                                )}
+                                                    <Clock3 className="mr-2 h-4 w-4" />
+                                                    Cliente Ausente
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>
+                                                        Reportar Cliente
+                                                        Ausente?
+                                                    </AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        Isso iniciará um
+                                                        cronômetro de 5 minutos.
+                                                        Você deve aguardar no
+                                                        local. O cliente será
+                                                        notificado via WhatsApp.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>
+                                                        Voltar
+                                                    </AlertDialogCancel>
+                                                    <AlertDialogAction
+                                                        className="bg-amber-600 hover:bg-amber-700"
+                                                        onClick={() =>
+                                                            runDeliveryAction(
+                                                                "absent",
+                                                            )
+                                                        }
+                                                    >
+                                                        Confirmar Ausência
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    )}
 
-                                {canReportIncident && (
-                                    <Button
-                                        variant="ghost"
-                                        className="w-full text-slate-500 hover:text-red-600"
-                                        onClick={() => setIsIncidentDialogOpen(true)}
-                                        disabled={!!runningAction}
-                                    >
-                                        <AlertCircle className="mr-2 h-4 w-4" />
-                                        Reportar Problema
-                                    </Button>
-                                )}
+                                    {canReportIncident && (
+                                        <Button
+                                            variant="ghost"
+                                            className="w-full text-slate-500 hover:text-red-600"
+                                            onClick={() =>
+                                                setIsIncidentDialogOpen(true)
+                                            }
+                                            disabled={!!runningAction}
+                                        >
+                                            <AlertCircle className="mr-2 h-4 w-4" />
+                                            Reportar Problema
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                        </>
+                    ) : availableOffer ? (
+                        <div className="p-6">
+                            <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <Badge className="bg-sky-600 text-white">
+                                            {availableOffer.isHighPriority
+                                                ? "Alta prioridade"
+                                                : "Disponível"}
+                                        </Badge>
+                                        <h3 className="mt-3 text-lg font-bold text-slate-900">
+                                            Corrida #
+                                            {availableOffer.orderId.slice(-6)}
+                                        </h3>
+                                        <p className="mt-1 text-sm text-slate-600">
+                                            Uma entrega entrou na fila próxima a
+                                            você. Aguarde a atribuição da loja
+                                            ou atualize sua fila.
+                                        </p>
+                                    </div>
+                                    <div className="rounded-full bg-white p-3 text-sky-600 shadow-sm">
+                                        <Route className="h-5 w-5" />
+                                    </div>
+                                </div>
+
+                                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                                    <div className="rounded-xl bg-white p-3">
+                                        <p className="text-xs text-slate-500">
+                                            Repasse
+                                        </p>
+                                        <p className="font-bold text-slate-900">
+                                            {availableOffer.riderPayoutCents
+                                                ? formatMoney(
+                                                      availableOffer.riderPayoutCents,
+                                                  )
+                                                : "A confirmar"}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-xl bg-white p-3">
+                                        <p className="text-xs text-slate-500">
+                                            Bônus
+                                        </p>
+                                        <p className="font-bold text-slate-900">
+                                            {availableOffer.bonusValueCents
+                                                ? formatMoney(
+                                                      availableOffer.bonusValueCents,
+                                                  )
+                                                : "Sem bônus"}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <Button
+                                    type="button"
+                                    className="mt-4 w-full bg-sky-600 hover:bg-sky-700"
+                                    onClick={() => void refreshRiderState()}
+                                    disabled={isRefreshing}
+                                >
+                                    <RefreshCw
+                                        className={cn(
+                                            "mr-2 h-4 w-4",
+                                            isRefreshing && "animate-spin",
+                                        )}
+                                    />
+                                    Atualizar minha fila
+                                </Button>
                             </div>
                         </div>
-                        </>
                     ) : (
                         <div className="p-6">
                             <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">
@@ -849,21 +1045,28 @@ export function RiderDashboard({
                             <div className="absolute top-1.5 ml-6 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-white" />
                         ) : null}
                     </button>
-                    <button className="flex flex-col items-center gap-1 rounded-xl px-6 py-2 text-slate-400 transition-colors hover:text-slate-600">
-                        <User className="h-6 w-6" />
-                        <span className="text-xs font-medium">Perfil</span>
-                    </button>
+                    <Link
+                        href="/delivery/rider/wallet"
+                        className="flex flex-col items-center gap-1 rounded-xl px-6 py-2 text-slate-400 transition-colors hover:text-slate-600"
+                    >
+                        <WalletCards className="h-6 w-6" />
+                        <span className="text-xs font-medium">Carteira</span>
+                    </Link>
                 </div>
             </nav>
 
             {/* Incident Dialog */}
-            <Dialog open={isIncidentDialogOpen} onOpenChange={setIsIncidentDialogOpen}>
+            <Dialog
+                open={isIncidentDialogOpen}
+                onOpenChange={setIsIncidentDialogOpen}
+            >
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle>Reportar Incidente</DialogTitle>
                         <DialogDescription>
-                            Use esta opção apenas para problemas graves (ex: pneu furado, acidente).
-                            A entrega será redistribuída e você ficará temporariamente offline.
+                            Use esta opção apenas para problemas graves (ex:
+                            pneu furado, acidente). A entrega será redistribuída
+                            e você ficará temporariamente offline.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
@@ -873,27 +1076,40 @@ export function RiderDashboard({
                                 id="reason"
                                 className="w-full rounded-md border border-slate-200 p-2"
                                 value={incidentReason}
-                                onChange={(e) => setIncidentReason(e.target.value)}
+                                onChange={(e) =>
+                                    setIncidentReason(e.target.value)
+                                }
                             >
                                 <option value="">Selecione um motivo</option>
-                                <option value="VEHICLE_ISSUE">Problema no veículo</option>
+                                <option value="VEHICLE_ISSUE">
+                                    Problema no veículo
+                                </option>
                                 <option value="ACCIDENT">Acidente</option>
-                                <option value="HEALTH_ISSUE">Problema de saúde</option>
+                                <option value="HEALTH_ISSUE">
+                                    Problema de saúde
+                                </option>
                                 <option value="OTHER">Outro</option>
                             </select>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="description">Descrição (Opcional)</Label>
+                            <Label htmlFor="description">
+                                Descrição (Opcional)
+                            </Label>
                             <Textarea
                                 id="description"
                                 placeholder="Descreva o que aconteceu..."
                                 value={incidentDescription}
-                                onChange={(e) => setIncidentDescription(e.target.value)}
+                                onChange={(e) =>
+                                    setIncidentDescription(e.target.value)
+                                }
                             />
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsIncidentDialogOpen(false)}>
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsIncidentDialogOpen(false)}
+                        >
                             Cancelar
                         </Button>
                         <Button

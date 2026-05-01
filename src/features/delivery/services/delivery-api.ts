@@ -47,9 +47,14 @@ export async function getStoreDeliveryById(
     userId: string,
     deliveryId: string,
 ): Promise<StoreDelivery> {
-    return fetchNestApiJson<StoreDelivery>(`/delivery/deliveries/${deliveryId}`, {
-        headers: buildTenantHeaders(userId),
-    });
+    const deliveries = await listStoreDeliveries(userId);
+    const delivery = deliveries.find((item) => item.id === deliveryId);
+
+    if (!delivery) {
+        throw new Error(`Entrega "${deliveryId}" nao encontrada.`);
+    }
+
+    return delivery;
 }
 
 export async function reportRiderIncident(

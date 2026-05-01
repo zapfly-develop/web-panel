@@ -20,6 +20,8 @@ import type {
     DeliveryStatusFilter,
     StoreDelivery,
 } from "../services/delivery-types";
+import { RiderOperationsMap } from "@/features/orders/components/rider-operations-map";
+import { buildRiderMarkers } from "@/features/orders/services/order-utils";
 import { DeliveryList } from "../components/delivery-list";
 import { RiderAssignmentDialog } from "../components/rider-assignment-dialog";
 import { useDeliveryRealtime } from "../hooks/use-delivery-realtime";
@@ -27,6 +29,7 @@ import { useDeliveryRealtime } from "../hooks/use-delivery-realtime";
 type StoreDeliveryManagerProps = {
     userId: string;
     initialDeliveries: StoreDelivery[];
+    initialAvailableRiders: DeliveryRider[];
 };
 
 type FilterOption = {
@@ -37,6 +40,8 @@ type FilterOption = {
 const filterOptions: FilterOption[] = [
     { value: "ALL", label: "Todas" },
     { value: "WAITING_RIDER", label: "Aguardando" },
+    { value: "READY_FOR_PICKUP", label: "Prontas" },
+    { value: "DELIVERY_STAGNATED", label: "Estagnadas" },
     { value: "ASSIGNED", label: "Atribuidas" },
     { value: "PICKED_UP", label: "Coletadas" },
     { value: "DELIVERED", label: "Entregues" },
@@ -54,6 +59,8 @@ function matchesStatusFilter(
     if (statusFilter === "WAITING_RIDER") {
         return (
             delivery.status === "WAITING_RIDER" ||
+            delivery.status === "READY_FOR_PICKUP" ||
+            delivery.status === "DELIVERY_STAGNATED" ||
             delivery.status === "PENDING_ASSIGNMENT"
         );
     }
@@ -90,6 +97,8 @@ function buildMetrics(deliveries: StoreDelivery[]) {
         waiting: deliveries.filter((delivery) =>
             matchesStatusFilter(delivery, "WAITING_RIDER"),
         ).length,
+        highPriority: deliveries.filter((delivery) => delivery.isHighPriority)
+            .length,
         assigned: deliveries.filter((delivery) => delivery.status === "ASSIGNED")
             .length,
         pickedUp: deliveries.filter((delivery) => delivery.status === "PICKED_UP")
@@ -102,8 +111,12 @@ function buildMetrics(deliveries: StoreDelivery[]) {
 export function StoreDeliveryManager({
     userId,
     initialDeliveries,
+    initialAvailableRiders,
 }: StoreDeliveryManagerProps) {
     const [deliveries, setDeliveries] = useState(initialDeliveries);
+    const [availableRiders, setAvailableRiders] = useState(
+        initialAvailableRiders,
+    );
     const [statusFilter, setStatusFilter] =
         useState<DeliveryStatusFilter>("ALL");
     const [query, setQuery] = useState("");
@@ -116,26 +129,51 @@ export function StoreDeliveryManager({
         setDeliveries(initialDeliveries);
     }, [initialDeliveries]);
 
+    useEffect(() => {
+        setAvailableRiders(initialAvailableRiders);
+    }, [initialAvailableRiders]);
+
     const refreshDeliveries = useCallback(async () => {
         try {
             setIsRefreshing(true);
 
-            const response = await fetch("/api/dashboard/delivery/deliveries", {
-                headers: {
-                    Accept: "application/json",
-                },
-            });
-            const payload = await response.json().catch(() => null);
+            const [deliveriesResponse, ridersResponse] = await Promise.all([
+                fetch("/api/dashboard/delivery/deliveries", {
+                    headers: {
+                        Accept: "application/json",
+                    },
+                }),
+                fetch("/api/dashboard/delivery/riders/available", {
+                    headers: {
+                        Accept: "application/json",
+                    },
+                }),
+            ]);
+            const deliveriesPayload = await deliveriesResponse
+                .json()
+                .catch(() => null);
+            const ridersPayload = await ridersResponse.json().catch(() => null);
 
-            if (!response.ok) {
+            if (!deliveriesResponse.ok) {
                 throw new Error(
-                    payload?.error ||
-                        payload?.message ||
+                    deliveriesPayload?.error ||
+                        deliveriesPayload?.message ||
                         "Nao foi possivel atualizar entregas.",
                 );
             }
 
-            setDeliveries(Array.isArray(payload) ? payload : []);
+            if (!ridersResponse.ok) {
+                throw new Error(
+                    ridersPayload?.error ||
+                        ridersPayload?.message ||
+                        "Nao foi possivel atualizar riders.",
+                );
+            }
+
+            setDeliveries(
+                Array.isArray(deliveriesPayload) ? deliveriesPayload : [],
+            );
+            setAvailableRiders(Array.isArray(ridersPayload) ? ridersPayload : []);
             setLastSyncAt(new Date().toISOString());
         } finally {
             setIsRefreshing(false);
@@ -159,6 +197,10 @@ export function StoreDeliveryManager({
     }, [realtime.isConnected, refreshDeliveries]);
 
     const metrics = useMemo(() => buildMetrics(deliveries), [deliveries]);
+    const riderMarkers = useMemo(
+        () => buildRiderMarkers(deliveries, availableRiders),
+        [availableRiders, deliveries],
+    );
     const filteredDeliveries = useMemo(
         () =>
             deliveries.filter(
@@ -194,54 +236,70 @@ export function StoreDeliveryManager({
 
     return (
         <div className="space-y-5">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-md border border-amber-100 bg-amber-50 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium text-amber-700">
-                            Aguardando
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+                <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-md border border-amber-100 bg-amber-50 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-medium text-amber-700">
+                                Aguardando
+                            </p>
+                            <Timer className="h-4 w-4 text-amber-600" />
+                        </div>
+                        <p className="mt-2 text-2xl font-bold text-amber-900">
+                            {metrics.waiting}
                         </p>
-                        <Timer className="h-4 w-4 text-amber-600" />
                     </div>
-                    <p className="mt-2 text-2xl font-bold text-amber-900">
-                        {metrics.waiting}
-                    </p>
+
+                    <div className="rounded-md border border-violet-100 bg-violet-50 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-medium text-violet-700">
+                                Prioritarias
+                            </p>
+                            <Radio className="h-4 w-4 text-violet-600" />
+                        </div>
+                        <p className="mt-2 text-2xl font-bold text-violet-900">
+                            {metrics.highPriority}
+                        </p>
+                    </div>
+
+                    <div className="rounded-md border border-sky-100 bg-sky-50 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-medium text-sky-700">
+                                Atribuidas
+                            </p>
+                            <Bike className="h-4 w-4 text-sky-600" />
+                        </div>
+                        <p className="mt-2 text-2xl font-bold text-sky-900">
+                            {metrics.assigned}
+                        </p>
+                    </div>
+
+                    <div className="rounded-md border border-teal-100 bg-teal-50 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-medium text-teal-700">
+                                Coletadas
+                            </p>
+                            <PackageCheck className="h-4 w-4 text-teal-600" />
+                        </div>
+                        <p className="mt-2 text-2xl font-bold text-teal-900">
+                            {metrics.pickedUp}
+                        </p>
+                    </div>
+
+                    <div className="rounded-md border border-emerald-100 bg-emerald-50 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-medium text-emerald-700">
+                                Entregues
+                            </p>
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                        </div>
+                        <p className="mt-2 text-2xl font-bold text-emerald-900">
+                            {metrics.delivered}
+                        </p>
+                    </div>
                 </div>
 
-                <div className="rounded-md border border-sky-100 bg-sky-50 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium text-sky-700">
-                            Atribuidas
-                        </p>
-                        <Bike className="h-4 w-4 text-sky-600" />
-                    </div>
-                    <p className="mt-2 text-2xl font-bold text-sky-900">
-                        {metrics.assigned}
-                    </p>
-                </div>
-
-                <div className="rounded-md border border-teal-100 bg-teal-50 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium text-teal-700">
-                            Coletadas
-                        </p>
-                        <PackageCheck className="h-4 w-4 text-teal-600" />
-                    </div>
-                    <p className="mt-2 text-2xl font-bold text-teal-900">
-                        {metrics.pickedUp}
-                    </p>
-                </div>
-
-                <div className="rounded-md border border-emerald-100 bg-emerald-50 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium text-emerald-700">
-                            Entregues
-                        </p>
-                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    </div>
-                    <p className="mt-2 text-2xl font-bold text-emerald-900">
-                        {metrics.delivered}
-                    </p>
-                </div>
+                <RiderOperationsMap markers={riderMarkers} />
             </div>
 
             <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 lg:flex-row lg:items-center lg:justify-between">

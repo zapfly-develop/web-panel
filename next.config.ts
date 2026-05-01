@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
         "local-origin.dev",
         "*.local-origin.dev",
         "migration-springer-klein-perl.trycloudflare.com",
+        "delivery.aliancaonline.site",
     ],
     output: "standalone",
 };
