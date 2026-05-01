@@ -11,6 +11,7 @@ import {
     RefreshCw,
     Route,
     User,
+    WalletCards,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -44,8 +45,6 @@ import {
 } from "../services/delivery-api";
 import { DailyStats } from "../components/optional-components";
 import { DeliveryMap } from "../components/delivery-map";
-
-
 
 type PushSubscriptionPayload = {
     endpoint: string;
@@ -97,7 +96,8 @@ async function ensurePushSubscription() {
         return { ensured: false, reason: "not-granted" as const };
     }
 
-    const existingSubscription = await registration.pushManager.getSubscription();
+    const existingSubscription =
+        await registration.pushManager.getSubscription();
     if (existingSubscription) {
         return { ensured: true, reason: "already-subscribed" as const };
     }
@@ -120,7 +120,9 @@ async function ensurePushSubscription() {
         headers: {
             "Content-Type": "application/json",
         },
-        body: JSON.stringify(createdSubscription.toJSON() as PushSubscriptionPayload),
+        body: JSON.stringify(
+            createdSubscription.toJSON() as PushSubscriptionPayload,
+        ),
     });
 
     return { ensured: true, reason: "subscribed" as const };
@@ -138,7 +140,6 @@ type DeliveryActionPayload = {
     reason?: string;
     description?: string;
 };
-
 
 type RiderDailyStats = {
     deliveriesCompleted: number;
@@ -358,7 +359,10 @@ export function RiderDashboard({
 
     useEffect(() => {
         if (typeof window !== "undefined") {
-            window.localStorage.setItem(getTodayStatsKey(userId), JSON.stringify(dailyStats));
+            window.localStorage.setItem(
+                getTodayStatsKey(userId),
+                JSON.stringify(dailyStats),
+            );
         }
     }, [dailyStats, userId]);
 
@@ -368,8 +372,14 @@ export function RiderDashboard({
         }
 
         if (!isOnline && onlineStartedAtRef.current != null) {
-            const elapsed = Math.max(0, Math.floor((Date.now() - onlineStartedAtRef.current) / 1000));
-            setDailyStats((current) => ({ ...current, onlineSeconds: current.onlineSeconds + elapsed }));
+            const elapsed = Math.max(
+                0,
+                Math.floor((Date.now() - onlineStartedAtRef.current) / 1000),
+            );
+            setDailyStats((current) => ({
+                ...current,
+                onlineSeconds: current.onlineSeconds + elapsed,
+            }));
             onlineStartedAtRef.current = null;
         }
     }, [isOnline]);
@@ -381,7 +391,8 @@ export function RiderDashboard({
 
         setDailyStats((current) => ({
             deliveriesCompleted: current.deliveriesCompleted + 1,
-            totalEarnings: current.totalEarnings + (activeDelivery.riderPayoutCents || 0),
+            totalEarnings:
+                current.totalEarnings + (activeDelivery.riderPayoutCents || 0),
             onlineSeconds: current.onlineSeconds,
         }));
     }, [activeDelivery?.id, activeDelivery?.status]);
@@ -700,20 +711,78 @@ export function RiderDashboard({
                                 }
                             />
                             <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between gap-2">
-                                <Badge className="bg-slate-900/90 text-white shadow">#{activeDelivery.orderId.slice(-6)}</Badge>
-                                <Badge className="bg-sky-600/90 text-white shadow">{activeDelivery.status.replaceAll("_", " ")}</Badge>
+                                <Badge className="bg-slate-900/90 text-white shadow">
+                                    #{activeDelivery.orderId.slice(-6)}
+                                </Badge>
+                                <Badge className="bg-sky-600/90 text-white shadow">
+                                    {activeDelivery.status.replaceAll("_", " ")}
+                                </Badge>
                             </div>
                             <div className="absolute inset-x-3 bottom-3 space-y-2">
                                 <div className="rounded-xl bg-white/95 p-3 shadow backdrop-blur">
-                                    <p className="text-xs text-slate-500">Cliente</p>
-                                    <p className="font-semibold text-slate-900">{customerLabel}</p>
-                                    <p className="line-clamp-2 text-sm text-slate-600">{activeDelivery.destinationAddress}</p>
+                                    <p className="text-xs text-slate-500">
+                                        Cliente
+                                    </p>
+                                    <p className="font-semibold text-slate-900">
+                                        {customerLabel}
+                                    </p>
+                                    <p className="line-clamp-2 text-sm text-slate-600">
+                                        {activeDelivery.destinationAddress}
+                                    </p>
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
-                                    {canAccept ? <Button className={cn("h-12 bg-sky-600 hover:bg-sky-700", justAccepted && "animate-pulse")} onClick={() => runDeliveryAction("accept")} disabled={!!runningAction}>Aceitar</Button> : null}
-                                    {canPickUp ? <Button className={cn("h-12 bg-amber-600 hover:bg-amber-700", justPickedUp && "animate-pulse")} onClick={() => runDeliveryAction("pick-up")} disabled={!!runningAction}>Coletar</Button> : null}
-                                    {canComplete ? <Button className="h-12 bg-emerald-600 hover:bg-emerald-700" onClick={() => runDeliveryAction("complete")} disabled={!!runningAction || activeDelivery.status === "ABSENT_WAITING"}>Finalizar</Button> : null}
-                                    <Button variant="outline" className="h-12 border-slate-300 bg-white/90" onClick={() => setIsActionsMenuOpen(true)}>Mais opções</Button>
+                                    {canAccept ? (
+                                        <Button
+                                            className={cn(
+                                                "h-12 bg-sky-600 hover:bg-sky-700",
+                                                justAccepted && "animate-pulse",
+                                            )}
+                                            onClick={() =>
+                                                runDeliveryAction("accept")
+                                            }
+                                            disabled={!!runningAction}
+                                        >
+                                            Aceitar
+                                        </Button>
+                                    ) : null}
+                                    {canPickUp ? (
+                                        <Button
+                                            className={cn(
+                                                "h-12 bg-amber-600 hover:bg-amber-700",
+                                                justPickedUp && "animate-pulse",
+                                            )}
+                                            onClick={() =>
+                                                runDeliveryAction("pick-up")
+                                            }
+                                            disabled={!!runningAction}
+                                        >
+                                            Coletar
+                                        </Button>
+                                    ) : null}
+                                    {canComplete ? (
+                                        <Button
+                                            className="h-12 bg-emerald-600 hover:bg-emerald-700"
+                                            onClick={() =>
+                                                runDeliveryAction("complete")
+                                            }
+                                            disabled={
+                                                !!runningAction ||
+                                                activeDelivery.status ===
+                                                    "ABSENT_WAITING"
+                                            }
+                                        >
+                                            Finalizar
+                                        </Button>
+                                    ) : null}
+                                    <Button
+                                        variant="outline"
+                                        className="h-12 border-slate-300 bg-white/90"
+                                        onClick={() =>
+                                            setIsActionsMenuOpen(true)
+                                        }
+                                    >
+                                        Mais opções
+                                    </Button>
                                 </div>
                             </div>
                         </>
@@ -721,11 +790,35 @@ export function RiderDashboard({
                         <div className="flex h-full items-center justify-center p-6 text-center">
                             <div>
                                 <Route className="mx-auto h-12 w-12 text-slate-400" />
-                                <p className="mt-3 font-semibold text-slate-800">Aguardando nova corrida</p>
-                                <p className="text-sm text-slate-500">Fique online para receber chamadas.</p>
+                                <p className="mt-3 font-semibold text-slate-800">
+                                    Aguardando nova corrida
+                                </p>
+                                <p className="text-sm text-slate-500">
+                                    Fique online para receber chamadas.
+                                </p>
                                 {!activeDelivery ? (
                                     <div className="mt-4 rounded-xl bg-white/90 p-3 text-left shadow">
-                                        <DailyStats deliveriesCompleted={dailyStats.deliveriesCompleted} totalEarnings={dailyStats.totalEarnings} hoursActive={(dailyStats.onlineSeconds + (isOnline && onlineStartedAtRef.current ? Math.floor((Date.now() - onlineStartedAtRef.current) / 1000) : 0)) / 3600} averageRating={4.9} />
+                                        <DailyStats
+                                            deliveriesCompleted={
+                                                dailyStats.deliveriesCompleted
+                                            }
+                                            totalEarnings={
+                                                dailyStats.totalEarnings
+                                            }
+                                            hoursActive={
+                                                (dailyStats.onlineSeconds +
+                                                    (isOnline &&
+                                                    onlineStartedAtRef.current
+                                                        ? Math.floor(
+                                                              (Date.now() -
+                                                                  onlineStartedAtRef.current) /
+                                                                  1000,
+                                                          )
+                                                        : 0)) /
+                                                3600
+                                            }
+                                            averageRating={4.9}
+                                        />
                                     </div>
                                 ) : null}
                             </div>
@@ -734,15 +827,42 @@ export function RiderDashboard({
                 </div>
             </div>
 
-            <Dialog open={isActionsMenuOpen} onOpenChange={setIsActionsMenuOpen}>
+            <Dialog
+                open={isActionsMenuOpen}
+                onOpenChange={setIsActionsMenuOpen}
+            >
                 <DialogContent className="rounded-xl">
                     <DialogHeader>
                         <DialogTitle>Opções da corrida</DialogTitle>
-                        <DialogDescription>Ações rápidas para esta entrega.</DialogDescription>
+                        <DialogDescription>
+                            Ações rápidas para esta entrega.
+                        </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-2">
-                        {canReportAbsent ? <Button variant="outline" className="w-full justify-start" onClick={() => { setIsActionsMenuOpen(false); runDeliveryAction("absent"); }}>Cliente ausente</Button> : null}
-                        {canReportIncident ? <Button variant="outline" className="w-full justify-start" onClick={() => { setIsActionsMenuOpen(false); setIsIncidentDialogOpen(true); }}>Reportar incidente</Button> : null}
+                        {canReportAbsent ? (
+                            <Button
+                                variant="outline"
+                                className="w-full justify-start"
+                                onClick={() => {
+                                    setIsActionsMenuOpen(false);
+                                    runDeliveryAction("absent");
+                                }}
+                            >
+                                Cliente ausente
+                            </Button>
+                        ) : null}
+                        {canReportIncident ? (
+                            <Button
+                                variant="outline"
+                                className="w-full justify-start"
+                                onClick={() => {
+                                    setIsActionsMenuOpen(false);
+                                    setIsIncidentDialogOpen(true);
+                                }}
+                            >
+                                Reportar incidente
+                            </Button>
+                        ) : null}
                     </div>
                 </DialogContent>
             </Dialog>
