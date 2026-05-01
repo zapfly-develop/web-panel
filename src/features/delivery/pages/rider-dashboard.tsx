@@ -1,40 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     AlertCircle,
     Bike,
-    CheckCircle2,
-    Clock3,
     Home,
     Loader2,
-    LocateFixed,
-    MapPin,
     Menu,
-    MessageSquare,
-    PackageCheck,
-    Phone,
-    Radio,
     RefreshCw,
     Route,
     User,
-    WalletCards,
-    WifiOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,11 +42,89 @@ import {
     reportClientAbsent,
     reportRiderIncident,
 } from "../services/delivery-api";
-import {
-    DailyStats,
-    DeliveryTimeline,
-} from "../components/optional-components";
+import { DailyStats } from "../components/optional-components";
 import { DeliveryMap } from "../components/delivery-map";
+
+
+
+type PushSubscriptionPayload = {
+    endpoint: string;
+    expirationTime: number | null;
+    keys: {
+        p256dh: string;
+        auth: string;
+    };
+};
+
+function urlBase64ToUint8Array(base64String: string) {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const normalized = (base64String + padding)
+        .replace(/-/g, "+")
+        .replace(/_/g, "/");
+
+    const rawData = window.atob(normalized);
+    const outputArray = new Uint8Array(rawData.length);
+
+    for (let i = 0; i < rawData.length; i += 1) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+
+    return outputArray;
+}
+
+async function ensurePushSubscription() {
+    if (
+        typeof window === "undefined" ||
+        !("Notification" in window) ||
+        !("serviceWorker" in navigator)
+    ) {
+        return { ensured: false, reason: "unsupported" as const };
+    }
+
+    const permission = Notification.permission;
+    if (permission === "denied") {
+        return { ensured: false, reason: "denied" as const };
+    }
+
+    const registration = await navigator.serviceWorker.ready;
+    let nextPermission = permission;
+
+    if (nextPermission !== "granted") {
+        nextPermission = await Notification.requestPermission();
+    }
+
+    if (nextPermission !== "granted") {
+        return { ensured: false, reason: "not-granted" as const };
+    }
+
+    const existingSubscription = await registration.pushManager.getSubscription();
+    if (existingSubscription) {
+        return { ensured: true, reason: "already-subscribed" as const };
+    }
+
+    const { publicKey } = await fetchJson<{ publicKey: string }>(
+        "/api/notifications/vapid-public-key",
+    );
+
+    if (!publicKey) {
+        return { ensured: false, reason: "missing-key" as const };
+    }
+
+    const createdSubscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+    });
+
+    await fetchJson("/api/notifications/push-subscriptions", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(createdSubscription.toJSON() as PushSubscriptionPayload),
+    });
+
+    return { ensured: true, reason: "subscribed" as const };
+}
 
 type RiderDashboardProps = {
     userId: string;
@@ -81,6 +138,18 @@ type DeliveryActionPayload = {
     reason?: string;
     description?: string;
 };
+
+
+type RiderDailyStats = {
+    deliveriesCompleted: number;
+    totalEarnings: number;
+    onlineSeconds: number;
+};
+
+function getTodayStatsKey(userId: string) {
+    const dayKey = new Date().toISOString().slice(0, 10);
+    return `rider-daily-stats:${userId}:${dayKey}`;
+}
 
 function formatTime(value: string) {
     return new Intl.DateTimeFormat("pt-BR", {
@@ -138,10 +207,19 @@ export function RiderDashboard({
     );
     const [activeTab, setActiveTab] = useState<"home" | "delivery">("home");
     const [isIncidentDialogOpen, setIsIncidentDialogOpen] = useState(false);
+    const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
     const [incidentReason, setIncidentReason] = useState("");
     const [incidentDescription, setIncidentDescription] = useState("");
     const [availableOffer, setAvailableOffer] =
         useState<RiderNewAvailableDeliveryEvent | null>(null);
+    const [dailyStats, setDailyStats] = useState<RiderDailyStats>({
+        deliveriesCompleted: 0,
+        totalEarnings: 0,
+        onlineSeconds: 0,
+    });
+    const [justAccepted, setJustAccepted] = useState(false);
+    const [justPickedUp, setJustPickedUp] = useState(false);
+    const onlineStartedAtRef = useRef<number | null>(null);
 
     const isActiveRider = profile?.status === "ACTIVE";
     const isOnline = isOperationallyOnline(profile);
@@ -259,6 +337,56 @@ export function RiderDashboard({
     const contingencies = useDeliveryContingencies(activeDelivery);
 
     useEffect(() => {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        const raw = window.localStorage.getItem(getTodayStatsKey(userId));
+        if (!raw) return;
+
+        try {
+            const parsed = JSON.parse(raw) as RiderDailyStats;
+            setDailyStats({
+                deliveriesCompleted: parsed.deliveriesCompleted || 0,
+                totalEarnings: parsed.totalEarnings || 0,
+                onlineSeconds: parsed.onlineSeconds || 0,
+            });
+        } catch {
+            window.localStorage.removeItem(getTodayStatsKey(userId));
+        }
+    }, [userId]);
+
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            window.localStorage.setItem(getTodayStatsKey(userId), JSON.stringify(dailyStats));
+        }
+    }, [dailyStats, userId]);
+
+    useEffect(() => {
+        if (isOnline && onlineStartedAtRef.current == null) {
+            onlineStartedAtRef.current = Date.now();
+        }
+
+        if (!isOnline && onlineStartedAtRef.current != null) {
+            const elapsed = Math.max(0, Math.floor((Date.now() - onlineStartedAtRef.current) / 1000));
+            setDailyStats((current) => ({ ...current, onlineSeconds: current.onlineSeconds + elapsed }));
+            onlineStartedAtRef.current = null;
+        }
+    }, [isOnline]);
+
+    useEffect(() => {
+        if (!activeDelivery || activeDelivery.status !== "DELIVERED") {
+            return;
+        }
+
+        setDailyStats((current) => ({
+            deliveriesCompleted: current.deliveriesCompleted + 1,
+            totalEarnings: current.totalEarnings + (activeDelivery.riderPayoutCents || 0),
+            onlineSeconds: current.onlineSeconds,
+        }));
+    }, [activeDelivery?.id, activeDelivery?.status]);
+
+    useEffect(() => {
         const interval = window.setInterval(
             () => void refreshActiveDelivery(),
             realtime.isConnected ? 60000 : 20000,
@@ -341,6 +469,24 @@ export function RiderDashboard({
             toast.success(
                 nextChecked ? "Você está online." : "Você está offline.",
             );
+
+            if (nextChecked) {
+                const pushResult = await ensurePushSubscription();
+
+                if (pushResult.reason === "denied") {
+                    toast.warning(
+                        "Notificações bloqueadas no navegador. Ative para receber novas corridas.",
+                    );
+                } else if (pushResult.reason === "not-granted") {
+                    toast.info(
+                        "Permissão de notificações não concedida. Sem isso você pode perder novas entregas.",
+                    );
+                } else if (pushResult.reason === "unsupported") {
+                    toast.info(
+                        "Este dispositivo não suporta notificações push no PWA.",
+                    );
+                }
+            }
         } catch (error) {
             toast.error(
                 error instanceof Error
@@ -393,6 +539,16 @@ export function RiderDashboard({
             }
 
             await Promise.all([refreshActiveDelivery(), refreshProfile()]);
+
+            if (action === "accept") {
+                setJustAccepted(true);
+                window.setTimeout(() => setJustAccepted(false), 1800);
+            }
+
+            if (action === "pick-up") {
+                setJustPickedUp(true);
+                window.setTimeout(() => setJustPickedUp(false), 1800);
+            }
 
             toast.success(`Operação ${actionCopy[action]} concluída.`);
 
@@ -525,219 +681,10 @@ export function RiderDashboard({
             </header>
 
             {/* Content */}
-            <div className="mx-auto max-w-md space-y-4 px-4 py-6">
-                {/* Availability Card */}
-                <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
-                    <div className="bg-gradient-to-r from-sky-500 to-sky-600 p-4 text-white">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium opacity-90">
-                                    Status de operação
-                                </p>
-                                <h2 className="mt-1 text-2xl font-bold">
-                                    {statusCopy.label}
-                                </h2>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                {isChangingAvailability ? (
-                                    <Loader2 className="h-5 w-5 animate-spin" />
-                                ) : null}
-                                <Switch
-                                    checked={isOnline}
-                                    disabled={
-                                        !isActiveRider || isChangingAvailability
-                                    }
-                                    onCheckedChange={handleAvailabilityChange}
-                                    className="data-[state=checked]:bg-white data-[state=unchecked]:bg-sky-300/50"
-                                />
-                            </div>
-                        </div>
-                    </div>
-                    <div className="p-4">
-                        <p className="text-sm text-slate-600">
-                            {isOnline
-                                ? "🎯 Você está recebendo chamadas de entrega"
-                                : "⏸️ Você está fora da fila de entregas"}
-                        </p>
-                        {profile.vehiclePlate ? (
-                            <div className="mt-3 inline-flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-1.5">
-                                <Bike className="h-4 w-4 text-slate-600" />
-                                <span className="text-sm font-medium text-slate-700">
-                                    {profile.vehiclePlate}
-                                </span>
-                            </div>
-                        ) : null}
-                    </div>
-                </div>
-
-                {/* Status Grid */}
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="overflow-hidden rounded-2xl bg-white shadow-md">
-                        <div className="p-4">
-                            <div className="flex items-center gap-3">
-                                <div
-                                    className={cn(
-                                        "rounded-full p-2.5",
-                                        realtime.isConnected
-                                            ? "bg-emerald-100"
-                                            : "bg-slate-100",
-                                    )}
-                                >
-                                    {realtime.isConnected ? (
-                                        <Radio className="h-5 w-5 text-emerald-600" />
-                                    ) : (
-                                        <WifiOff className="h-5 w-5 text-slate-400" />
-                                    )}
-                                </div>
-                                <div>
-                                    <p className="text-xs font-medium text-slate-500">
-                                        Conexão
-                                    </p>
-                                    <p className="text-sm font-bold text-slate-950">
-                                        {realtime.isConnected
-                                            ? "Ativa"
-                                            : "Polling"}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="overflow-hidden rounded-2xl bg-white shadow-md">
-                        <div className="p-4">
-                            <div className="flex items-center gap-3">
-                                <div
-                                    className={cn(
-                                        "rounded-full p-2.5",
-                                        location.isActive
-                                            ? "bg-emerald-100"
-                                            : "bg-slate-100",
-                                    )}
-                                >
-                                    <LocateFixed
-                                        className={cn(
-                                            "h-5 w-5",
-                                            location.isActive
-                                                ? "text-emerald-600"
-                                                : "text-slate-400",
-                                        )}
-                                    />
-                                </div>
-                                <div>
-                                    <p className="text-xs font-medium text-slate-500">
-                                        GPS
-                                    </p>
-                                    <p className="text-sm font-bold text-slate-950">
-                                        {location.isActive
-                                            ? "Ativo"
-                                            : "Inativo"}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <DailyStats
-                    deliveriesCompleted={5}
-                    totalEarnings={8500} // em centavos
-                    hoursActive={4.5}
-                    averageRating={4.8}
-                />
-
-                {/* Location Error */}
-                {location.errorMessage ? (
-                    <Alert
-                        variant="destructive"
-                        className="rounded-2xl shadow-md"
-                    >
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertTitle>Localização pausada</AlertTitle>
-                        <AlertDescription>
-                            {location.errorMessage}
-                        </AlertDescription>
-                    </Alert>
-                ) : null}
-
-                {/* Cooldown Alert */}
-                {profile.incidentBlockedUntil &&
-                new Date(profile.incidentBlockedUntil) > new Date() ? (
-                    <Alert
-                        variant="destructive"
-                        className="rounded-2xl shadow-md"
-                    >
-                        <Clock3 className="h-4 w-4" />
-                        <AlertTitle>Bloqueio Temporário</AlertTitle>
-                        <AlertDescription>
-                            Você está temporariamente bloqueado para novas
-                            entregas até{" "}
-                            {new Intl.DateTimeFormat("pt-BR", {
-                                timeStyle: "short",
-                            }).format(new Date(profile.incidentBlockedUntil))}
-                            .
-                        </AlertDescription>
-                    </Alert>
-                ) : null}
-
-                {/* Active Delivery Card */}
-                <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
-                    <div className="bg-gradient-to-r from-slate-800 to-slate-700 p-4 text-white">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium opacity-90">
-                                    Entrega ativa
-                                </p>
-                                <h2 className="mt-1 text-xl font-bold">
-                                    {activeDelivery
-                                        ? `#${activeDelivery.orderId.slice(-6)}`
-                                        : "Aguardando chamada"}
-                                </h2>
-                            </div>
-                            <div className="rounded-full bg-white/20 p-3 backdrop-blur-sm">
-                                <Bike className="h-6 w-6" />
-                            </div>
-                        </div>
-                    </div>
-
+            <div className="mx-auto max-w-md px-3 py-3">
+                <div className="relative h-[calc(100dvh-172px)] overflow-hidden rounded-xl bg-slate-200 shadow-lg">
                     {activeDelivery ? (
                         <>
-                            {activeDelivery.status === "ABSENT_WAITING" && (
-                                <div className="bg-amber-50 p-4 border-b border-amber-100">
-                                    <div className="flex items-center justify-between text-amber-800">
-                                        <div className="flex items-center gap-2">
-                                            <Clock3 className="h-5 w-5 animate-pulse" />
-                                            <span className="font-bold">
-                                                Aguardando cliente no local
-                                            </span>
-                                        </div>
-                                        <span className="text-xl font-mono font-bold">
-                                            {contingencies.formattedTimeLeft ||
-                                                "0:00"}
-                                        </span>
-                                    </div>
-                                    <p className="mt-1 text-xs text-amber-700">
-                                        O cliente foi notificado. Por favor,
-                                        aguarde o tempo de segurança.
-                                    </p>
-                                </div>
-                            )}
-
-                            {activeDelivery.status ===
-                                "RETURNING_TO_MERCHANT" && (
-                                <div className="bg-red-50 p-4 border-b border-red-100">
-                                    <div className="flex items-center gap-2 text-red-800">
-                                        <RefreshCw className="h-5 w-5" />
-                                        <span className="font-bold">
-                                            Retornar para a loja
-                                        </span>
-                                    </div>
-                                    <p className="mt-1 text-xs text-red-700">
-                                        Tempo de espera esgotado. Por favor,
-                                        devolva o pacote na loja.
-                                    </p>
-                                </div>
-                            )}
-
                             <DeliveryMap
                                 pickupLat={activeDelivery.pickupLatitude}
                                 pickupLng={activeDelivery.pickupLongitude}
@@ -752,259 +699,53 @@ export function RiderDashboard({
                                         : undefined
                                 }
                             />
-
-                            <DeliveryTimeline
-                                currentStatus={activeDelivery.status}
-                                acceptedAt={activeDelivery.acceptedAt}
-                                deliveredAt={activeDelivery.deliveredAt}
-                                key={`delyvery-timeline-component`}
-                                pickedUpAt={activeDelivery.pickedUpAt}
-                            />
-
-                            <div className="p-4 space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h3 className="font-bold text-slate-900">
-                                            {customerLabel}
-                                        </h3>
-                                        <p className="text-sm text-slate-500">
-                                            {activeDelivery.destinationAddress}
-                                        </p>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <Button
-                                            size="icon"
-                                            variant="outline"
-                                            className="rounded-full"
-                                        >
-                                            <Phone className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                            size="icon"
-                                            variant="outline"
-                                            className="rounded-full"
-                                        >
-                                            <MessageSquare className="h-4 w-4" />
-                                        </Button>
-                                    </div>
+                            <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between gap-2">
+                                <Badge className="bg-slate-900/90 text-white shadow">#{activeDelivery.orderId.slice(-6)}</Badge>
+                                <Badge className="bg-sky-600/90 text-white shadow">{activeDelivery.status.replaceAll("_", " ")}</Badge>
+                            </div>
+                            <div className="absolute inset-x-3 bottom-3 space-y-2">
+                                <div className="rounded-xl bg-white/95 p-3 shadow backdrop-blur">
+                                    <p className="text-xs text-slate-500">Cliente</p>
+                                    <p className="font-semibold text-slate-900">{customerLabel}</p>
+                                    <p className="line-clamp-2 text-sm text-slate-600">{activeDelivery.destinationAddress}</p>
                                 </div>
-
-                                <div className="pt-2 flex flex-wrap gap-2">
-                                    {canAccept && (
-                                        <Button
-                                            className="flex-1 bg-sky-600 hover:bg-sky-700"
-                                            onClick={() =>
-                                                runDeliveryAction("accept")
-                                            }
-                                            disabled={!!runningAction}
-                                        >
-                                            {runningAction === "accept" ? (
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            ) : (
-                                                <CheckCircle2 className="mr-2 h-4 w-4" />
-                                            )}
-                                            Aceitar Corrida
-                                        </Button>
-                                    )}
-
-                                    {canPickUp && (
-                                        <Button
-                                            className="flex-1 bg-amber-600 hover:bg-amber-700"
-                                            onClick={() =>
-                                                runDeliveryAction("pick-up")
-                                            }
-                                            disabled={!!runningAction}
-                                        >
-                                            {runningAction === "pick-up" ? (
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            ) : (
-                                                <PackageCheck className="mr-2 h-4 w-4" />
-                                            )}
-                                            Coletar Pedido
-                                        </Button>
-                                    )}
-
-                                    {canComplete && (
-                                        <Button
-                                            className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                                            onClick={() =>
-                                                runDeliveryAction("complete")
-                                            }
-                                            disabled={
-                                                !!runningAction ||
-                                                activeDelivery.status ===
-                                                    "ABSENT_WAITING"
-                                            }
-                                        >
-                                            {runningAction === "complete" ? (
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            ) : (
-                                                <CheckCircle2 className="mr-2 h-4 w-4" />
-                                            )}
-                                            Finalizar Entrega
-                                        </Button>
-                                    )}
-
-                                    {canReportAbsent && (
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                <Button
-                                                    variant="outline"
-                                                    className="flex-1 border-amber-200 text-amber-700 hover:bg-amber-50"
-                                                    disabled={!!runningAction}
-                                                >
-                                                    <Clock3 className="mr-2 h-4 w-4" />
-                                                    Cliente Ausente
-                                                </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle>
-                                                        Reportar Cliente
-                                                        Ausente?
-                                                    </AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                        Isso iniciará um
-                                                        cronômetro de 5 minutos.
-                                                        Você deve aguardar no
-                                                        local. O cliente será
-                                                        notificado via WhatsApp.
-                                                    </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogCancel>
-                                                        Voltar
-                                                    </AlertDialogCancel>
-                                                    <AlertDialogAction
-                                                        className="bg-amber-600 hover:bg-amber-700"
-                                                        onClick={() =>
-                                                            runDeliveryAction(
-                                                                "absent",
-                                                            )
-                                                        }
-                                                    >
-                                                        Confirmar Ausência
-                                                    </AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
-                                    )}
-
-                                    {canReportIncident && (
-                                        <Button
-                                            variant="ghost"
-                                            className="w-full text-slate-500 hover:text-red-600"
-                                            onClick={() =>
-                                                setIsIncidentDialogOpen(true)
-                                            }
-                                            disabled={!!runningAction}
-                                        >
-                                            <AlertCircle className="mr-2 h-4 w-4" />
-                                            Reportar Problema
-                                        </Button>
-                                    )}
+                                <div className="grid grid-cols-2 gap-2">
+                                    {canAccept ? <Button className={cn("h-12 bg-sky-600 hover:bg-sky-700", justAccepted && "animate-pulse")} onClick={() => runDeliveryAction("accept")} disabled={!!runningAction}>Aceitar</Button> : null}
+                                    {canPickUp ? <Button className={cn("h-12 bg-amber-600 hover:bg-amber-700", justPickedUp && "animate-pulse")} onClick={() => runDeliveryAction("pick-up")} disabled={!!runningAction}>Coletar</Button> : null}
+                                    {canComplete ? <Button className="h-12 bg-emerald-600 hover:bg-emerald-700" onClick={() => runDeliveryAction("complete")} disabled={!!runningAction || activeDelivery.status === "ABSENT_WAITING"}>Finalizar</Button> : null}
+                                    <Button variant="outline" className="h-12 border-slate-300 bg-white/90" onClick={() => setIsActionsMenuOpen(true)}>Mais opções</Button>
                                 </div>
                             </div>
                         </>
-                    ) : availableOffer ? (
-                        <div className="p-6">
-                            <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
-                                <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                        <Badge className="bg-sky-600 text-white">
-                                            {availableOffer.isHighPriority
-                                                ? "Alta prioridade"
-                                                : "Disponível"}
-                                        </Badge>
-                                        <h3 className="mt-3 text-lg font-bold text-slate-900">
-                                            Corrida #
-                                            {availableOffer.orderId.slice(-6)}
-                                        </h3>
-                                        <p className="mt-1 text-sm text-slate-600">
-                                            Uma entrega entrou na fila próxima a
-                                            você. Aguarde a atribuição da loja
-                                            ou atualize sua fila.
-                                        </p>
-                                    </div>
-                                    <div className="rounded-full bg-white p-3 text-sky-600 shadow-sm">
-                                        <Route className="h-5 w-5" />
-                                    </div>
-                                </div>
-
-                                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                                    <div className="rounded-xl bg-white p-3">
-                                        <p className="text-xs text-slate-500">
-                                            Repasse
-                                        </p>
-                                        <p className="font-bold text-slate-900">
-                                            {availableOffer.riderPayoutCents
-                                                ? formatMoney(
-                                                      availableOffer.riderPayoutCents,
-                                                  )
-                                                : "A confirmar"}
-                                        </p>
-                                    </div>
-                                    <div className="rounded-xl bg-white p-3">
-                                        <p className="text-xs text-slate-500">
-                                            Bônus
-                                        </p>
-                                        <p className="font-bold text-slate-900">
-                                            {availableOffer.bonusValueCents
-                                                ? formatMoney(
-                                                      availableOffer.bonusValueCents,
-                                                  )
-                                                : "Sem bônus"}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <Button
-                                    type="button"
-                                    className="mt-4 w-full bg-sky-600 hover:bg-sky-700"
-                                    onClick={() => void refreshRiderState()}
-                                    disabled={isRefreshing}
-                                >
-                                    <RefreshCw
-                                        className={cn(
-                                            "mr-2 h-4 w-4",
-                                            isRefreshing && "animate-spin",
-                                        )}
-                                    />
-                                    Atualizar minha fila
-                                </Button>
-                            </div>
-                        </div>
                     ) : (
-                        <div className="p-6">
-                            <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">
-                                <div className="mx-auto mb-4 inline-flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-slate-100 to-slate-200">
-                                    <MapPin className="h-8 w-8 text-slate-400" />
-                                </div>
-                                <h3 className="text-lg font-bold text-slate-900">
-                                    Nenhuma entrega ativa
-                                </h3>
-                                <p className="mt-2 text-sm text-slate-600">
-                                    Fique online para receber uma corrida.
-                                    Quando a loja atribuir uma entrega, ela
-                                    aparece aqui automaticamente.
-                                </p>
+                        <div className="flex h-full items-center justify-center p-6 text-center">
+                            <div>
+                                <Route className="mx-auto h-12 w-12 text-slate-400" />
+                                <p className="mt-3 font-semibold text-slate-800">Aguardando nova corrida</p>
+                                <p className="text-sm text-slate-500">Fique online para receber chamadas.</p>
+                                {!activeDelivery ? (
+                                    <div className="mt-4 rounded-xl bg-white/90 p-3 text-left shadow">
+                                        <DailyStats deliveriesCompleted={dailyStats.deliveriesCompleted} totalEarnings={dailyStats.totalEarnings} hoursActive={(dailyStats.onlineSeconds + (isOnline && onlineStartedAtRef.current ? Math.floor((Date.now() - onlineStartedAtRef.current) / 1000) : 0)) / 3600} averageRating={4.9} />
+                                    </div>
+                                ) : null}
                             </div>
                         </div>
                     )}
                 </div>
-
-                {/* Last Location Update */}
-                {location.lastLocation ? (
-                    <div className="text-center">
-                        <div className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs text-slate-500 shadow-sm">
-                            <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                            Último ping às{" "}
-                            {formatTime(location.lastLocation.sentAt)}
-                        </div>
-                    </div>
-                ) : null}
             </div>
 
+            <Dialog open={isActionsMenuOpen} onOpenChange={setIsActionsMenuOpen}>
+                <DialogContent className="rounded-xl">
+                    <DialogHeader>
+                        <DialogTitle>Opções da corrida</DialogTitle>
+                        <DialogDescription>Ações rápidas para esta entrega.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-2">
+                        {canReportAbsent ? <Button variant="outline" className="w-full justify-start" onClick={() => { setIsActionsMenuOpen(false); runDeliveryAction("absent"); }}>Cliente ausente</Button> : null}
+                        {canReportIncident ? <Button variant="outline" className="w-full justify-start" onClick={() => { setIsActionsMenuOpen(false); setIsIncidentDialogOpen(true); }}>Reportar incidente</Button> : null}
+                    </div>
+                </DialogContent>
+            </Dialog>
             {/* Bottom Navigation */}
             <nav className="fixed bottom-0 left-0 right-0 z-10 border-t border-slate-200 bg-white shadow-lg">
                 <div className="mx-auto flex max-w-md items-center justify-around py-2">
