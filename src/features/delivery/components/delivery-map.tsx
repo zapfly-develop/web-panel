@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Navigation, Route } from "lucide-react";
+import { Navigation } from "lucide-react";
 import type { DeliveryStatus } from "../services/delivery-types";
 import { loadGoogleMaps } from "../../orders/services/google-maps-loader";
 
@@ -207,8 +207,8 @@ export function DeliveryMap({
     }, [center, destination, pickup, rider, routeSegments]);
 
     return (
-        <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
-            <div className="relative aspect-[16/10] bg-slate-100">
+        <div className="h-full overflow-hidden rounded-xl bg-white shadow-lg">
+            <div className="relative h-full min-h-[56dvh] bg-slate-100">
                 <div ref={mapRef} className="h-full w-full" />
                 {mapStatus !== "ready" ? (
                     <div className="absolute inset-0 z-10 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-4 text-center">
@@ -228,29 +228,6 @@ export function DeliveryMap({
                 ) : null}
             </div>
 
-            <div className="grid gap-2 p-4 text-xs text-slate-600">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <LegendItem color="#0f172a" label="Você" />
-                    <LegendItem color="#0ea5e9" label="Loja" />
-                    <LegendItem color="#10b981" label="Cliente" />
-                </div>
-                <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
-                    <Route className="h-3.5 w-3.5 text-slate-400" />
-                    <span>{getRouteSummary(status, Boolean(rider))}</span>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function LegendItem({ color, label }: { color: string; label: string }) {
-    return (
-        <div className="flex items-center gap-2">
-            <span
-                className="h-3 w-3 rounded-full"
-                style={{ backgroundColor: color }}
-            />
-            <span>{label}</span>
         </div>
     );
 }
@@ -382,11 +359,11 @@ function createMarker(
         zIndex,
         icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: 8,
+            scale: 14,
             fillColor: color,
             fillOpacity: 1,
             strokeColor: "#ffffff",
-            strokeWeight: 2,
+            strokeWeight: 3,
         },
     });
 }
@@ -436,23 +413,4 @@ function getOverlayTitle(status: MapStatus) {
     }
 
     return "Carregando mapa";
-}
-
-function getRouteSummary(
-    status: DeliveryStatus | null | undefined,
-    hasRiderLocation: boolean,
-) {
-    if (status === "RETURNING_TO_MERCHANT") {
-        return "Rota de retorno para a loja.";
-    }
-
-    if (status && AFTER_PICKUP_STATUSES.has(status)) {
-        return hasRiderLocation
-            ? "Rota atual ate o cliente."
-            : "Rota planejada da loja ate o cliente.";
-    }
-
-    return hasRiderLocation
-        ? "Rota para retirar na loja e rota planejada de entrega."
-        : "Rota planejada da loja ate o cliente.";
 }

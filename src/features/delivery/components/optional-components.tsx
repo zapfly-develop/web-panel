@@ -29,52 +29,28 @@ export function DailyStats({
     };
 
     return (
-        <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
-            <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 p-4 text-white">
-                <h3 className="text-lg font-bold">Estatísticas de Hoje</h3>
-                <p className="text-sm opacity-90">Seu desempenho até agora</p>
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div className="border-b border-slate-200 px-4 py-3">
+                <h3 className="text-sm font-semibold tracking-wide text-slate-700">
+                    ESTATÍSTICAS DE HOJE
+                </h3>
             </div>
-            <div className="grid grid-cols-2 gap-4 p-4">
-                <div className="rounded-xl bg-gradient-to-br from-sky-50 to-sky-100 p-4">
-                    <div className="mb-2 inline-flex rounded-lg bg-white p-2 shadow-sm">
-                        <Package className="h-5 w-5 text-sky-600" />
-                    </div>
-                    <p className="text-xs font-medium text-sky-700">Entregas</p>
-                    <p className="mt-1 text-2xl font-bold text-sky-950">
-                        {deliveriesCompleted}
-                    </p>
+            <div className="grid grid-cols-2 gap-2 p-3">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Entregas concluídas</p>
+                    <p className="mt-1 text-xl font-bold text-slate-900">{deliveriesCompleted}</p>
                 </div>
-
-                <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100 p-4">
-                    <div className="mb-2 inline-flex rounded-lg bg-white p-2 shadow-sm">
-                        <DollarSign className="h-5 w-5 text-emerald-600" />
-                    </div>
-                    <p className="text-xs font-medium text-emerald-700">
-                        Ganhos
-                    </p>
-                    <p className="mt-1 text-2xl font-bold text-emerald-950">
-                        {formatMoney(totalEarnings)}
-                    </p>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Ganhos no dia</p>
+                    <p className="mt-1 text-xl font-bold text-slate-900">{formatMoney(totalEarnings)}</p>
                 </div>
-
-                <div className="rounded-xl bg-gradient-to-br from-amber-50 to-amber-100 p-4">
-                    <div className="mb-2 inline-flex rounded-lg bg-white p-2 shadow-sm">
-                        <Clock className="h-5 w-5 text-amber-600" />
-                    </div>
-                    <p className="text-xs font-medium text-amber-700">Horas</p>
-                    <p className="mt-1 text-2xl font-bold text-amber-950">
-                        {hoursActive.toFixed(1)}h
-                    </p>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Horas online</p>
+                    <p className="mt-1 text-xl font-bold text-slate-900">{hoursActive.toFixed(1)}h</p>
                 </div>
-
-                <div className="rounded-xl bg-gradient-to-br from-teal-50 to-teal-100 p-4">
-                    <div className="mb-2 inline-flex rounded-lg bg-white p-2 shadow-sm">
-                        <TrendingUp className="h-5 w-5 text-teal-600" />
-                    </div>
-                    <p className="text-xs font-medium text-teal-700">Rating</p>
-                    <p className="mt-1 text-2xl font-bold text-teal-950">
-                        {averageRating.toFixed(1)} ⭐
-                    </p>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Avaliação média</p>
+                    <p className="mt-1 text-xl font-bold text-slate-900">{averageRating.toFixed(1)}</p>
                 </div>
             </div>
         </div>
