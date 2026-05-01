@@ -16,6 +16,7 @@ const initialState: LoginPrevState = {
     values: {
         email: "",
     },
+    redirectTo: null,
 };
 
 export function LoginForm() {
@@ -27,7 +28,7 @@ export function LoginForm() {
 
     useEffect(() => {
         if (state?.status === "success") {
-            router.push("/dashboard");
+            router.push(state.redirectTo ?? "/dashboard");
         }
     }, [state, router]);
 

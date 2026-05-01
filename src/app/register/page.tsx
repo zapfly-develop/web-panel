@@ -32,6 +32,14 @@ export default async function RegisterPage() {
     const session = await auth();
 
     if (session?.user?.id) {
+        if (session.user.isSuperAdmin) {
+            redirect("/admin/dashboard");
+        }
+
+        if (session.user.isRider) {
+            redirect("/delivery/rider");
+        }
+
         redirect("/dashboard");
     }
 

@@ -1,11 +1,22 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertCircle, ArrowRight, ClipboardList, PackageCheck } from "lucide-react";
+import {
+    AlertCircle,
+    ArrowRight,
+    ClipboardList,
+    PackageCheck,
+} from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { StoreDeliveryManager } from "@/features/delivery/pages/store-delivery-manager";
-import { listStoreDeliveries } from "@/features/delivery/services/delivery-api";
-import type { StoreDelivery } from "@/features/delivery/services/delivery-types";
+import {
+    listAvailableDeliveryRiders,
+    listStoreDeliveries,
+} from "@/features/delivery/services/delivery-api";
+import type {
+    DeliveryRider,
+    StoreDelivery,
+} from "@/features/delivery/services/delivery-types";
 import { requireSessionUser } from "@/lib/server-session";
 
 export const runtime = "nodejs";
@@ -18,10 +29,17 @@ export default async function DashboardDeliveryPage() {
     }
 
     let deliveries: StoreDelivery[] = [];
+    let availableRiders: DeliveryRider[] = [];
     let loadError: string | null = null;
 
     try {
-        deliveries = await listStoreDeliveries(user.id);
+        const [deliveryItems, riders] = await Promise.all([
+            listStoreDeliveries(user.id),
+            listAvailableDeliveryRiders(user.id).catch(() => []),
+        ]);
+
+        deliveries = deliveryItems;
+        availableRiders = riders;
     } catch (error) {
         loadError =
             error instanceof Error
@@ -75,6 +93,7 @@ export default async function DashboardDeliveryPage() {
             <StoreDeliveryManager
                 userId={user.id}
                 initialDeliveries={deliveries}
+                initialAvailableRiders={availableRiders}
             />
         </div>
     );

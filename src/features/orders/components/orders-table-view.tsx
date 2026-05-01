@@ -76,6 +76,8 @@ export function OrdersTableView({
                             order.status === "PREPARING" && !delivery;
                         const canAssignRider =
                             delivery?.status === "WAITING_RIDER" ||
+                            delivery?.status === "READY_FOR_PICKUP" ||
+                            delivery?.status === "DELIVERY_STAGNATED" ||
                             delivery?.status === "PENDING_ASSIGNMENT";
 
                         return (

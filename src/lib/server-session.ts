@@ -20,3 +20,17 @@ export async function requireSuperAdminUser() {
 
     return user;
 }
+
+export async function requireRiderUser() {
+    const user = await requireSessionUser();
+
+    if (user.isSuperAdmin) {
+        redirect("/admin/dashboard");
+    }
+
+    if (!user.isRider) {
+        redirect("/dashboard");
+    }
+
+    return user;
+}

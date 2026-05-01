@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { RiderDashboard } from "@/features/delivery/pages/rider-dashboard";
 import {
     getMyActiveDelivery,
@@ -8,16 +7,12 @@ import type {
     DeliveryRider,
     StoreDelivery,
 } from "@/features/delivery/services/delivery-types";
-import { requireSessionUser } from "@/lib/server-session";
+import { requireRiderUser } from "@/lib/server-session";
 
 export const runtime = "nodejs";
 
 export default async function RiderAppPage() {
-    const user = await requireSessionUser();
-
-    if (user.isSuperAdmin) {
-        redirect("/admin/dashboard");
-    }
+    const user = await requireRiderUser();
 
     let profile: DeliveryRider | null = null;
     let activeDelivery: StoreDelivery | null = null;

@@ -133,6 +133,8 @@ export function OrderDetailsDialog({
                                         {(delivery.status ===
                                             "WAITING_RIDER" ||
                                             delivery.status ===
+                                                "READY_FOR_PICKUP" ||
+                                            delivery.status ===
                                                 "PENDING_ASSIGNMENT" ||
                                             delivery.status ===
                                                 "DELIVERY_STAGNATED") &&

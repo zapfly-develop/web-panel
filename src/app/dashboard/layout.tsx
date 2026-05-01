@@ -23,6 +23,10 @@ export default async function DashboardLayout({
         redirect("/admin/dashboard");
     }
 
+    if (session.user.isRider) {
+        redirect("/delivery/rider");
+    }
+
     return (
         <SidebarProvider>
             <div className="flex min-h-screen w-full bg-slate-50">

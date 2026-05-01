@@ -1,6 +1,8 @@
 "use server";
 
 import { signIn } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { UserRole } from "@prisma/client";
 import { AuthError } from "next-auth";
 import { z } from "zod";
 
@@ -14,6 +16,7 @@ export type LoginPrevState = {
     values: {
         email: string;
     };
+    redirectTo: string | null;
 };
 
 const loginSchema = z.object({
@@ -51,6 +54,7 @@ export async function actionLogin(
             values: {
                 email: rawValues.email,
             },
+            redirectTo: null,
         };
     }
 
@@ -61,6 +65,22 @@ export async function actionLogin(
             redirect: false,
         });
 
+        const user = await prisma.user.findUnique({
+            where: { email: parsed.data.email },
+            select: {
+                role: true,
+                riderProfile: {
+                    select: { id: true },
+                },
+            },
+        });
+        const redirectTo =
+            user?.role === UserRole.SUPER_ADMIN
+                ? "/admin/dashboard"
+                : user?.riderProfile
+                  ? "/delivery/rider"
+                  : "/dashboard";
+
         return {
             status: "success" as const,
             formError: null,
@@ -68,6 +88,7 @@ export async function actionLogin(
             values: {
                 email: parsed.data.email,
             },
+            redirectTo,
         };
     } catch (error: unknown) {
         if (error instanceof AuthError) {
@@ -81,6 +102,7 @@ export async function actionLogin(
                         values: {
                             email: rawValues.email,
                         },
+                        redirectTo: null,
                     };
                 default:
                     return {
@@ -91,6 +113,7 @@ export async function actionLogin(
                         values: {
                             email: rawValues.email,
                         },
+                        redirectTo: null,
                     };
             }
         }
@@ -103,6 +126,7 @@ export async function actionLogin(
             values: {
                 email: rawValues.email,
             },
+            redirectTo: null,
         };
     }
 }

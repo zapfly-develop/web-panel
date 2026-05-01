@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MapPin, Navigation, WifiOff } from "lucide-react";
+import { Bike, MapPin, Navigation, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
     GoogleMapsGlobal,
@@ -86,13 +86,15 @@ export function RiderOperationsMap({ markers }: RiderOperationsMapProps) {
                     });
                 }
 
+                const map = mapRef.current;
+
                 syncMarkers(
                     google,
-                    mapRef.current,
+                    map,
                     markerRefs.current,
                     markersWithLocation,
                 );
-                fitMapToMarkers(google, mapRef.current, markersWithLocation);
+                fitMapToMarkers(google, map, markersWithLocation);
                 setStatus("ready");
             } catch (error) {
                 if (!isCurrent) {
@@ -157,12 +159,14 @@ export function RiderOperationsMap({ markers }: RiderOperationsMapProps) {
                     >
                         <span
                             className={cn(
-                                "h-2.5 w-2.5 shrink-0 rounded-full",
+                                "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white",
                                 marker.activeDeliveryId
                                     ? "bg-sky-500"
                                     : "bg-emerald-500",
                             )}
-                        />
+                        >
+                            <Bike className="h-3.5 w-3.5" />
+                        </span>
                         <div className="min-w-0 flex-1">
                             <p className="truncate text-xs font-medium text-slate-800">
                                 {marker.name}

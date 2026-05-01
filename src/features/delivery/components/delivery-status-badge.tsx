@@ -10,6 +10,14 @@ const DELIVERY_STATUS_COPY: Record<
         label: "Aguardando rider",
         className: "border-amber-200 bg-amber-50 text-amber-700",
     },
+    READY_FOR_PICKUP: {
+        label: "Pronta para coleta",
+        className: "border-violet-200 bg-violet-50 text-violet-700",
+    },
+    INCIDENT_REPORTED: {
+        label: "Incidente",
+        className: "border-rose-200 bg-rose-50 text-rose-700",
+    },
     PENDING_ASSIGNMENT: {
         label: "Aguardando rider",
         className: "border-amber-200 bg-amber-50 text-amber-700",
@@ -83,4 +91,3 @@ export function DeliveryStatusBadge({
         </Badge>
     );
 }
-

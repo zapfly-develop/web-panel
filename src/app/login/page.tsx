@@ -1,4 +1,6 @@
 import { Bot } from "lucide-react";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import {
     Card,
     CardDescription,
@@ -7,7 +9,21 @@ import {
 } from "@/components/ui/card";
 import { LoginForm } from "@/components/auth/loginForm";
 
-export default function LoginPage() {
+export default async function LoginPage() {
+    const session = await auth();
+
+    if (session?.user?.id) {
+        if (session.user.isSuperAdmin) {
+            redirect("/admin/dashboard");
+        }
+
+        if (session.user.isRider) {
+            redirect("/delivery/rider");
+        }
+
+        redirect("/dashboard");
+    }
+
     return (
         <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
             <div className="w-full max-w-100 space-y-8">

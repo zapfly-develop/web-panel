@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     AlertCircle,
@@ -52,7 +53,9 @@ import { useDeliveryRealtime } from "../hooks/use-delivery-realtime";
 import { useRiderLocation } from "../hooks/use-rider-location";
 import { useDeliveryContingencies } from "../hooks/use-delivery-contingencies";
 import type {
+    DeliveryAssignedEvent,
     DeliveryRider,
+    RiderNewAvailableDeliveryEvent,
     DeliveryStatusChangedEvent,
     StoreDelivery,
 } from "../services/delivery-types";
@@ -60,10 +63,7 @@ import {
     reportClientAbsent,
     reportRiderIncident,
 } from "../services/delivery-api";
-import {
-    DailyStats,
-    DeliveryMapPlaceholder,
-} from "../components/optional-components";
+import { DailyStats } from "../components/optional-components";
 import { DeliveryMap } from "../components/delivery-map";
 
 type RiderDashboardProps = {
@@ -74,6 +74,10 @@ type RiderDashboardProps = {
 };
 
 type DeliveryAction = "accept" | "pick-up" | "complete" | "incident" | "absent";
+type DeliveryActionPayload = {
+    reason?: string;
+    description?: string;
+};
 
 function formatTime(value: string) {
     return new Intl.DateTimeFormat("pt-BR", {
@@ -86,18 +90,6 @@ function formatMoney(valueCents: number, currency = "BRL") {
         style: "currency",
         currency,
     }).format(valueCents / 100);
-}
-
-function formatDistance(distanceMeters: number | null) {
-    if (!distanceMeters || distanceMeters <= 0) {
-        return "Sem distância";
-    }
-
-    if (distanceMeters < 1000) {
-        return `${distanceMeters} m`;
-    }
-
-    return `${(distanceMeters / 1000).toFixed(1)} km`;
 }
 
 function isOperationallyOnline(profile: DeliveryRider | null) {
@@ -145,6 +137,8 @@ export function RiderDashboard({
     const [isIncidentDialogOpen, setIsIncidentDialogOpen] = useState(false);
     const [incidentReason, setIncidentReason] = useState("");
     const [incidentDescription, setIncidentDescription] = useState("");
+    const [availableOffer, setAvailableOffer] =
+        useState<RiderNewAvailableDeliveryEvent | null>(null);
 
     const isActiveRider = profile?.status === "ACTIVE";
     const isOnline = isOperationallyOnline(profile);
@@ -190,11 +184,50 @@ export function RiderDashboard({
         [profile, refreshActiveDelivery, refreshProfile],
     );
 
+    const handleDeliveryAssigned = useCallback(
+        (event: DeliveryAssignedEvent) => {
+            setAvailableOffer((currentOffer) =>
+                currentOffer?.deliveryId === event.deliveryId
+                    ? null
+                    : currentOffer,
+            );
+            void refreshActiveDelivery();
+        },
+        [refreshActiveDelivery],
+    );
+
+    const handleAvailableDelivery = useCallback(
+        (event: RiderNewAvailableDeliveryEvent) => {
+            if (
+                event.riderUserIds?.length &&
+                !event.riderUserIds.includes(userId)
+            ) {
+                return;
+            }
+
+            setAvailableOffer(event);
+
+            toast.info(
+                event.isHighPriority
+                    ? "Entrega prioritária disponível"
+                    : "Nova entrega disponível",
+                {
+                    description: event.riderPayoutCents
+                        ? `Repasse previsto: ${formatMoney(event.riderPayoutCents)}`
+                        : "A corrida entrou na fila próxima a você.",
+                    duration: 10000,
+                },
+            );
+        },
+        [userId],
+    );
+
     const realtime = useDeliveryRealtime({
         userId,
         enabled: Boolean(profile),
-        onDeliveryAssigned: () => void refreshActiveDelivery(),
+        onDeliveryAssigned: handleDeliveryAssigned,
         onDeliveryStatusChanged: handleDeliveryStatusChanged,
+        onRiderNewAvailableDelivery: handleAvailableDelivery,
         onRiderStatusChanged: () => void refreshProfile(),
         onCustomerResponded: (event) => {
             toast.info(event.message, {
@@ -202,7 +235,7 @@ export function RiderDashboard({
                 duration: 10000,
             });
         },
-        onRiderStalledWarning: (event) => {
+        onRiderStalledWarning: () => {
             toast.warning("Você está a caminho?", {
                 description:
                     "Notamos que você não se moveu em direção à loja. Reporte um incidente se houver problemas.",
@@ -235,6 +268,12 @@ export function RiderDashboard({
         enabled: Boolean(isOnline && isActiveRider),
         deliveryId: activeDeliveryId,
     });
+
+    useEffect(() => {
+        if (activeDelivery) {
+            setAvailableOffer(null);
+        }
+    }, [activeDelivery]);
 
     const statusCopy = useMemo(() => {
         if (!profile) {
@@ -312,7 +351,7 @@ export function RiderDashboard({
 
     async function runDeliveryAction(
         action: DeliveryAction,
-        payload?: Record<string, any>,
+        payload?: DeliveryActionPayload,
     ) {
         if (!activeDelivery) {
             return;
@@ -336,7 +375,11 @@ export function RiderDashboard({
                     payload as { reason: string; description?: string },
                 );
             } else if (action === "absent") {
-                await reportClientAbsent(userId, activeDelivery.id, payload);
+                await reportClientAbsent(
+                    userId,
+                    activeDelivery.id,
+                    payload ? { description: payload.description } : undefined,
+                );
             } else {
                 await fetchJson(
                     `/api/delivery/rider/deliveries/${activeDelivery.id}/${action}`,
@@ -412,6 +455,16 @@ export function RiderDashboard({
         activeDelivery?.order.customerName ||
         activeDelivery?.order.customerWhatsappId ||
         "Cliente";
+    const riderLatitude =
+        location.lastLocation?.latitude ??
+        profile.location?.latitude ??
+        profile.currentLatitude ??
+        null;
+    const riderLongitude =
+        location.lastLocation?.longitude ??
+        profile.location?.longitude ??
+        profile.currentLongitude ??
+        null;
 
     return (
         <main className="relative min-h-dvh bg-gradient-to-b from-slate-50 to-slate-100 pb-20">
@@ -677,6 +730,9 @@ export function RiderDashboard({
                             pickupLng={activeDelivery.pickupLongitude}
                             destLat={activeDelivery.destinationLatitude}
                             destLng={activeDelivery.destinationLongitude}
+                            riderLat={riderLatitude}
+                            riderLng={riderLongitude}
+                            status={activeDelivery.status}
                             distanceKm={
                                 activeDelivery.distanceMeters
                                     ? activeDelivery.distanceMeters / 1000
@@ -781,6 +837,73 @@ export function RiderDashboard({
                             </div>
                         </div>
                         </>
+                    ) : availableOffer ? (
+                        <div className="p-6">
+                            <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <Badge className="bg-sky-600 text-white">
+                                            {availableOffer.isHighPriority
+                                                ? "Alta prioridade"
+                                                : "Disponível"}
+                                        </Badge>
+                                        <h3 className="mt-3 text-lg font-bold text-slate-900">
+                                            Corrida #{availableOffer.orderId.slice(-6)}
+                                        </h3>
+                                        <p className="mt-1 text-sm text-slate-600">
+                                            Uma entrega entrou na fila próxima a
+                                            você. Aguarde a atribuição da loja
+                                            ou atualize sua fila.
+                                        </p>
+                                    </div>
+                                    <div className="rounded-full bg-white p-3 text-sky-600 shadow-sm">
+                                        <Route className="h-5 w-5" />
+                                    </div>
+                                </div>
+
+                                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                                    <div className="rounded-xl bg-white p-3">
+                                        <p className="text-xs text-slate-500">
+                                            Repasse
+                                        </p>
+                                        <p className="font-bold text-slate-900">
+                                            {availableOffer.riderPayoutCents
+                                                ? formatMoney(
+                                                      availableOffer.riderPayoutCents,
+                                                  )
+                                                : "A confirmar"}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-xl bg-white p-3">
+                                        <p className="text-xs text-slate-500">
+                                            Bônus
+                                        </p>
+                                        <p className="font-bold text-slate-900">
+                                            {availableOffer.bonusValueCents
+                                                ? formatMoney(
+                                                      availableOffer.bonusValueCents,
+                                                  )
+                                                : "Sem bônus"}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <Button
+                                    type="button"
+                                    className="mt-4 w-full bg-sky-600 hover:bg-sky-700"
+                                    onClick={() => void refreshRiderState()}
+                                    disabled={isRefreshing}
+                                >
+                                    <RefreshCw
+                                        className={cn(
+                                            "mr-2 h-4 w-4",
+                                            isRefreshing && "animate-spin",
+                                        )}
+                                    />
+                                    Atualizar minha fila
+                                </Button>
+                            </div>
+                        </div>
                     ) : (
                         <div className="p-6">
                             <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">
@@ -852,10 +975,13 @@ export function RiderDashboard({
                             <div className="absolute top-1.5 ml-6 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-white" />
                         ) : null}
                     </button>
-                    <button className="flex flex-col items-center gap-1 rounded-xl px-6 py-2 text-slate-400 transition-colors hover:text-slate-600">
-                        <User className="h-6 w-6" />
-                        <span className="text-xs font-medium">Perfil</span>
-                    </button>
+                    <Link
+                        href="/delivery/rider/wallet"
+                        className="flex flex-col items-center gap-1 rounded-xl px-6 py-2 text-slate-400 transition-colors hover:text-slate-600"
+                    >
+                        <WalletCards className="h-6 w-6" />
+                        <span className="text-xs font-medium">Carteira</span>
+                    </Link>
                 </div>
             </nav>
 

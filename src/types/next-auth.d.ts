@@ -2,6 +2,7 @@ import "next-auth";
 import "next-auth/jwt";
 import {
     PlanType,
+    RiderStatus,
     SubscriptionStatus,
     UserAccessStatus,
     UserRole,
@@ -19,6 +20,8 @@ declare module "next-auth" {
             subscriptionStatus?: SubscriptionStatus | null;
             hasActiveAccess?: boolean;
             isSuperAdmin?: boolean;
+            isRider?: boolean;
+            riderStatus?: RiderStatus | null;
         };
     }
 
@@ -29,6 +32,8 @@ declare module "next-auth" {
         planType?: PlanType | null;
         subscriptionStatus?: SubscriptionStatus | null;
         hasActiveAccess?: boolean;
+        isRider?: boolean;
+        riderStatus?: RiderStatus | null;
     }
 }
 
@@ -40,5 +45,7 @@ declare module "next-auth/jwt" {
         subscriptionStatus?: SubscriptionStatus | null;
         hasActiveAccess?: boolean;
         isSuperAdmin?: boolean;
+        isRider?: boolean;
+        riderStatus?: RiderStatus | null;
     }
 }

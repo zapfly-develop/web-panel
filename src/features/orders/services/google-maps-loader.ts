@@ -1,35 +1,15 @@
-export type GoogleMapsLatLngLiteral = {
-    lat: number;
-    lng: number;
-};
-
-export type GoogleMapsMap = {
-    fitBounds: (
-        bounds: any,
-        padding?: number | GoogleMapsPadding,
-    ) => void;
-    setCenter: (position: GoogleMapsLatLngLiteral) => void;
-    setZoom: (zoom: number) => void;
-};
-
-export type GoogleMapsLatLngBounds = {
-    extend: (position: GoogleMapsLatLngLiteral) => void;
-};
-
-export type GoogleMapsMarker = {
-    setMap: (map: GoogleMapsMap | null) => void;
-    setPosition: (position: GoogleMapsLatLngLiteral) => void;
-    setTitle: (title: string) => void;
-    setIcon: (icon: GoogleMapsMarkerIcon) => void;
-};
+export type GoogleMapsLatLngLiteral = google.maps.LatLngLiteral;
+export type GoogleMapsMap = google.maps.Map;
+export type GoogleMapsLatLngBounds = google.maps.LatLngBounds;
+export type GoogleMapsMarker = google.maps.Marker;
 
 export type GoogleMapsGlobal = {
     maps: {
         Map: typeof google.maps.Map;
-        Marker: new (options: GoogleMapsMarkerOptions) => GoogleMapsMarker;
-        LatLngBounds: new () => GoogleMapsLatLngBounds;
-        Point: new (x: number, y: number) => unknown;
-        Size: new (width: number, height: number) => unknown;
+        Marker: typeof google.maps.Marker;
+        LatLngBounds: typeof google.maps.LatLngBounds;
+        Point: typeof google.maps.Point;
+        Size: typeof google.maps.Size;
     };
 };
 
@@ -38,40 +18,6 @@ type GoogleMapsWindow = Window &
         google?: GoogleMapsGlobal;
         __zaplyGoogleMapsLoaded?: () => void;
     };
-
-type GoogleMapsMapOptions = {
-    center: GoogleMapsLatLngLiteral;
-    zoom: number;
-    disableDefaultUI?: boolean;
-    clickableIcons?: boolean;
-    fullscreenControl?: boolean;
-    gestureHandling?: string;
-    mapTypeControl?: boolean;
-    streetViewControl?: boolean;
-    zoomControl?: boolean;
-    keyboardShortcuts?: boolean;
-};
-
-type GoogleMapsMarkerIcon = {
-    url: string;
-    scaledSize?: unknown;
-    anchor?: unknown;
-};
-
-type GoogleMapsMarkerOptions = {
-    map: GoogleMapsMap;
-    position: GoogleMapsLatLngLiteral;
-    title: string;
-    icon: GoogleMapsMarkerIcon;
-    zIndex?: number;
-};
-
-type GoogleMapsPadding = {
-    top: number;
-    right: number;
-    bottom: number;
-    left: number;
-};
 
 const GOOGLE_MAPS_SCRIPT_ID = "zaply-google-maps-script";
 const GOOGLE_MAPS_CALLBACK = "__zaplyGoogleMapsLoaded";

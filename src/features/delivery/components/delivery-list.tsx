@@ -57,6 +57,8 @@ function formatDistance(distanceMeters: number | null) {
 function canAssignDelivery(delivery: StoreDelivery) {
     return (
         delivery.status === "WAITING_RIDER" ||
+        delivery.status === "READY_FOR_PICKUP" ||
+        delivery.status === "DELIVERY_STAGNATED" ||
         delivery.status === "PENDING_ASSIGNMENT"
     );
 }
@@ -207,4 +209,3 @@ export function DeliveryList({
         </div>
     );
 }
-
