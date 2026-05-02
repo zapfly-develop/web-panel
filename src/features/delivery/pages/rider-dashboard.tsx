@@ -620,6 +620,10 @@ export function RiderDashboard({
         activeDelivery?.status === "ARRIVED_AT_DESTINATION" ||
         activeDelivery?.status === "ABSENT_WAITING";
 
+    const canStartNavigation =
+        activeDelivery?.status === "PICKED_UP" ||
+        activeDelivery?.status === "IN_TRANSIT";
+
     const canReportIncident =
         activeDelivery?.status === "PICKED_UP" ||
         activeDelivery?.status === "IN_TRANSIT" ||
@@ -885,7 +889,8 @@ export function RiderDashboard({
                                         Nova entrega disponível
                                     </p>
                                     <p className="mt-1 text-sm font-medium text-slate-800">
-                                        Pedido #{availableOffer.orderId.slice(-6)}
+                                        Pedido #
+                                        {availableOffer.orderId.slice(-6)}
                                     </p>
                                     <p className="mt-1 text-sm text-slate-600">
                                         {availableOffer.destinationAddress}
@@ -893,7 +898,10 @@ export function RiderDashboard({
                                     {typeof availableOffer.riderPayoutCents ===
                                     "number" ? (
                                         <p className="mt-2 text-sm font-semibold text-emerald-700">
-                                            Repasse previsto: {formatMoney(availableOffer.riderPayoutCents)}
+                                            Repasse previsto:{" "}
+                                            {formatMoney(
+                                                availableOffer.riderPayoutCents,
+                                            )}
                                         </p>
                                     ) : null}
                                     <Button
@@ -925,7 +933,9 @@ export function RiderDashboard({
                                                 }
                                             })()
                                         }
-                                        disabled={!!runningAction || isAcceptingOffer}
+                                        disabled={
+                                            !!runningAction || isAcceptingOffer
+                                        }
                                     >
                                         {isAcceptingOffer ? (
                                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -958,8 +968,7 @@ export function RiderDashboard({
                                 if (
                                     activeDelivery?.destinationLatitude !=
                                         null &&
-                                    activeDelivery?.destinationLongitude !=
-                                        null
+                                    activeDelivery?.destinationLongitude != null
                                 ) {
                                     openExternalNavigation(
                                         "waze",
@@ -979,8 +988,7 @@ export function RiderDashboard({
                                 if (
                                     activeDelivery?.destinationLatitude !=
                                         null &&
-                                    activeDelivery?.destinationLongitude !=
-                                        null
+                                    activeDelivery?.destinationLongitude != null
                                 ) {
                                     openExternalNavigation(
                                         "google",
@@ -1000,8 +1008,7 @@ export function RiderDashboard({
                                 if (
                                     activeDelivery?.destinationLatitude !=
                                         null &&
-                                    activeDelivery?.destinationLongitude !=
-                                        null
+                                    activeDelivery?.destinationLongitude != null
                                 ) {
                                     openExternalNavigation(
                                         "apple",
