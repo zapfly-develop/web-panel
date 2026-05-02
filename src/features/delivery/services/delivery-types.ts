@@ -195,10 +195,11 @@ export const DELIVERY_AVAILABLE_EVENT = "delivery:available";
 export const DELIVERY_ASSIGNED_EVENT = "delivery:assigned";
 export const DELIVERY_STATUS_CHANGED_EVENT = "delivery:status_changed";
 export const DELIVERY_CUSTOMER_RESPONDED_EVENT = "delivery:customer_responded";
-export const DELIVERY_RIDER_STALLED_WARNING_EVENT = "delivery:rider_stalled_warning";
-export const DELIVERY_RIDER_STALLED_UNASSIGNED_EVENT = "delivery:rider_stalled_unassigned";
-export const RIDER_NEW_AVAILABLE_DELIVERY_EVENT =
-    DELIVERY_AVAILABLE_EVENT;
+export const DELIVERY_RIDER_STALLED_WARNING_EVENT =
+    "delivery:rider_stalled_warning";
+export const DELIVERY_RIDER_STALLED_UNASSIGNED_EVENT =
+    "delivery:rider_stalled_unassigned";
+export const RIDER_NEW_AVAILABLE_DELIVERY_EVENT = DELIVERY_AVAILABLE_EVENT;
 export const RIDER_STATUS_CHANGED_EVENT = "rider:status_changed";
 
 export type DeliveryAssignedEvent = {
@@ -228,6 +229,7 @@ export type RiderNewAvailableDeliveryEvent = {
     riderUserIds?: string[];
     pickupLatitude?: number | null;
     pickupLongitude?: number | null;
+    destinationAddress: string;
     quotedPriceCents?: number;
     riderPayoutCents?: number;
     bonusValueCents?: number;

@@ -115,6 +115,45 @@ function isOperationallyOnline(profile: DeliveryRider | null) {
     );
 }
 
+async function showRiderAssignmentNotification(deliveryId: string) {
+    if (typeof window === "undefined" || typeof Notification === "undefined") {
+        return;
+    }
+
+    if (Notification.permission !== "granted") {
+        return;
+    }
+
+    const title = "Nova corrida atribuída";
+    const body = "Uma entrega foi atribuída para você. Toque para abrir.";
+    const url = `/delivery/rider?deliveryId=${encodeURIComponent(deliveryId)}`;
+
+    try {
+        const registration = await navigator.serviceWorker?.getRegistration();
+
+        if (registration) {
+            await registration.showNotification(title, {
+                body,
+                icon: "/icon.png",
+                badge: "/icon.png",
+                data: { url },
+            });
+            return;
+        }
+    } catch {
+        // fallback abaixo
+    }
+
+    const notification = new Notification(title, {
+        body,
+        icon: "/icon.png",
+    });
+    notification.onclick = () => {
+        window.focus();
+        window.location.href = url;
+    };
+}
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
     const response = await fetch(url, {
         headers: {
@@ -217,6 +256,7 @@ export function RiderDashboard({
                     ? null
                     : currentOffer,
             );
+            void showRiderAssignmentNotification(event.deliveryId);
             void refreshActiveDelivery();
         },
         [refreshActiveDelivery],
