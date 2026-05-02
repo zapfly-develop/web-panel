@@ -71,6 +71,24 @@ function urlBase64ToUint8Array(base64String: string) {
     return outputArray;
 }
 
+type NavigationApp = "google" | "waze" | "apple";
+
+function openExternalNavigation(
+    app: NavigationApp,
+    latitude: number,
+    longitude: number,
+) {
+    const destination = `${latitude},${longitude}`;
+
+    const urls: Record<NavigationApp, string> = {
+        google: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}&travelmode=driving`,
+        waze: `https://waze.com/ul?ll=${encodeURIComponent(destination)}&navigate=yes`,
+        apple: `https://maps.apple.com/?daddr=${encodeURIComponent(destination)}&dirflg=d`,
+    };
+
+    window.open(urls[app], "_blank", "noopener,noreferrer");
+}
+
 type RiderDashboardProps = {
     userId: string;
     initialProfile: DeliveryRider | null;
@@ -191,6 +209,7 @@ export function RiderDashboard({
     const [activeTab, setActiveTab] = useState<"home" | "delivery">("home");
     const [isIncidentDialogOpen, setIsIncidentDialogOpen] = useState(false);
     const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+    const [isNavigationDialogOpen, setIsNavigationDialogOpen] = useState(false);
     const [incidentReason, setIncidentReason] = useState("");
     const [incidentDescription, setIncidentDescription] = useState("");
     const [availableOffer, setAvailableOffer] =
@@ -752,6 +771,17 @@ export function RiderDashboard({
                                             Coletar
                                         </Button>
                                     ) : null}
+                                    {canStartNavigation ? (
+                                        <Button
+                                            variant="outline"
+                                            className="h-12 border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100"
+                                            onClick={() =>
+                                                setIsNavigationDialogOpen(true)
+                                            }
+                                        >
+                                            Iniciar navegação
+                                        </Button>
+                                    ) : null}
                                     {canComplete ? (
                                         <Button
                                             className="h-12 bg-emerald-600 hover:bg-emerald-700"
@@ -908,6 +938,85 @@ export function RiderDashboard({
                     )}
                 </div>
             </div>
+
+            <Dialog
+                open={isNavigationDialogOpen}
+                onOpenChange={setIsNavigationDialogOpen}
+            >
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Iniciar navegação</DialogTitle>
+                        <DialogDescription>
+                            Escolha o aplicativo de GPS para ir até o destino.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                                if (
+                                    activeDelivery?.destinationLatitude !=
+                                        null &&
+                                    activeDelivery?.destinationLongitude !=
+                                        null
+                                ) {
+                                    openExternalNavigation(
+                                        "waze",
+                                        activeDelivery.destinationLatitude,
+                                        activeDelivery.destinationLongitude,
+                                    );
+                                    setIsNavigationDialogOpen(false);
+                                }
+                            }}
+                        >
+                            Abrir no Waze
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                                if (
+                                    activeDelivery?.destinationLatitude !=
+                                        null &&
+                                    activeDelivery?.destinationLongitude !=
+                                        null
+                                ) {
+                                    openExternalNavigation(
+                                        "google",
+                                        activeDelivery.destinationLatitude,
+                                        activeDelivery.destinationLongitude,
+                                    );
+                                    setIsNavigationDialogOpen(false);
+                                }
+                            }}
+                        >
+                            Abrir no Google Maps
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                                if (
+                                    activeDelivery?.destinationLatitude !=
+                                        null &&
+                                    activeDelivery?.destinationLongitude !=
+                                        null
+                                ) {
+                                    openExternalNavigation(
+                                        "apple",
+                                        activeDelivery.destinationLatitude,
+                                        activeDelivery.destinationLongitude,
+                                    );
+                                    setIsNavigationDialogOpen(false);
+                                }
+                            }}
+                        >
+                            Abrir no Mapas (iOS)
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             <Dialog
                 open={isActionsMenuOpen}
