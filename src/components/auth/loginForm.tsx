@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useActionState, useEffect } from "react";
-import { Lock, Mail } from "lucide-react";
+import { Loader2, Lock, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -94,7 +94,14 @@ export function LoginForm() {
                         disabled={isPending}
                         className="h-11 w-full bg-primary font-bold uppercase tracking-widest shadow-lg shadow-primary/20 transition-all hover:bg-primary/90"
                     >
-                        {isPending ? "Entrando..." : "Entrar no Painel"}
+                        {isPending ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Entrando...
+                            </>
+                        ) : (
+                            "Entrar no Painel"
+                        )}
                     </Button>
                     <p className="text-center text-sm text-slate-500">
                         Ainda nao tem conta?{" "}

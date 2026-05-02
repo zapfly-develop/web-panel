@@ -163,6 +163,7 @@ export function RiderDashboard({
     });
     const [justAccepted, setJustAccepted] = useState(false);
     const [justPickedUp, setJustPickedUp] = useState(false);
+    const [isAcceptingOffer, setIsAcceptingOffer] = useState(false);
     const onlineStartedAtRef = useRef<number | null>(null);
 
     const isActiveRider = profile?.status === "ACTIVE";
@@ -688,6 +689,9 @@ export function RiderDashboard({
                                             }
                                             disabled={!!runningAction}
                                         >
+                                            {runningAction === "accept" ? (
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            ) : null}
                                             Aceitar
                                         </Button>
                                     ) : null}
@@ -702,6 +706,9 @@ export function RiderDashboard({
                                             }
                                             disabled={!!runningAction}
                                         >
+                                            {runningAction === "pick-up" ? (
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            ) : null}
                                             Coletar
                                         </Button>
                                     ) : null}
@@ -717,6 +724,9 @@ export function RiderDashboard({
                                                     "ABSENT_WAITING"
                                             }
                                         >
+                                            {runningAction === "complete" ? (
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            ) : null}
                                             Finalizar
                                         </Button>
                                     ) : null}
@@ -799,6 +809,61 @@ export function RiderDashboard({
                                     foco total.
                                 </p>
                             </div>
+                            {availableOffer ? (
+                                <div className="rounded-xl border border-sky-200 bg-sky-50/95 p-4 text-left shadow-sm">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
+                                        Nova entrega disponível
+                                    </p>
+                                    <p className="mt-1 text-sm font-medium text-slate-800">
+                                        Pedido #{availableOffer.orderId.slice(-6)}
+                                    </p>
+                                    <p className="mt-1 text-sm text-slate-600">
+                                        {availableOffer.destinationAddress}
+                                    </p>
+                                    {typeof availableOffer.riderPayoutCents ===
+                                    "number" ? (
+                                        <p className="mt-2 text-sm font-semibold text-emerald-700">
+                                            Repasse previsto: {formatMoney(availableOffer.riderPayoutCents)}
+                                        </p>
+                                    ) : null}
+                                    <Button
+                                        className="mt-3 h-11 w-full bg-sky-600 hover:bg-sky-700"
+                                        onClick={() =>
+                                            void (async () => {
+                                                try {
+                                                    setIsAcceptingOffer(true);
+                                                    await fetchJson(
+                                                        `/api/delivery/rider/deliveries/${availableOffer.deliveryId}/accept`,
+                                                        { method: "POST" },
+                                                    );
+                                                    await Promise.all([
+                                                        refreshActiveDelivery(),
+                                                        refreshProfile(),
+                                                    ]);
+                                                    setAvailableOffer(null);
+                                                    toast.success(
+                                                        "Entrega aceita com sucesso.",
+                                                    );
+                                                } catch (error) {
+                                                    toast.error(
+                                                        error instanceof Error
+                                                            ? error.message
+                                                            : "Nao foi possivel aceitar a corrida.",
+                                                    );
+                                                } finally {
+                                                    setIsAcceptingOffer(false);
+                                                }
+                                            })()
+                                        }
+                                        disabled={!!runningAction || isAcceptingOffer}
+                                    >
+                                        {isAcceptingOffer ? (
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        ) : null}
+                                        Aceitar corrida
+                                    </Button>
+                                </div>
+                            ) : null}
                         </div>
                     )}
                 </div>

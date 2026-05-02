@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Lock, Mail, Phone, UserRound } from "lucide-react";
+import { Check, Loader2, Lock, Mail, Phone, UserRound } from "lucide-react";
 import { actionRegister, type RegisterPrevState } from "@/actions/register";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -247,7 +247,14 @@ export function RegisterForm() {
                     disabled={isPending}
                     className="h-11 w-full bg-primary font-bold uppercase tracking-widest shadow-lg shadow-primary/20 transition-all hover:bg-primary/90"
                 >
-                    {isPending ? "Criando conta..." : "Criar conta"}
+                    {isPending ? (
+                        <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Criando conta...
+                        </>
+                    ) : (
+                        "Criar conta"
+                    )}
                 </Button>
 
                 <p className="text-center text-sm text-slate-500">
