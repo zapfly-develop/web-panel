@@ -14,6 +14,12 @@ Env vars:
 
 Quando `REDIS_URL` existe, os servicos usam ela. Caso contrario, montam conexao por host/port/password/db.
 
+Observacao:
+
+- O `BullModule.forRoot` atual usa `REDIS_HOST` e `REDIS_PORT`.
+- Defina `REDIS_HOST`/`REDIS_PORT` mesmo se tambem definir `REDIS_URL`.
+- `REDIS_PASSWORD` e `REDIS_DB` sao usados por services diretos com `ioredis`, mas nao pelo root atual do BullMQ.
+
 Filas principais relacionadas:
 
 - `whatsapp-incoming`

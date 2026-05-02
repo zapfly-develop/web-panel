@@ -6,6 +6,9 @@ import {
     PlanType,
     PrismaClient,
     ProductType,
+    RiderAvailabilityStatus,
+    RiderStatus,
+    RiderVehicleType,
     SubscriptionStatus,
     UserRole,
 } from "@prisma/client";
@@ -103,6 +106,75 @@ async function seedUsers() {
     });
 
     return { admin, freeCustomer, paidCustomer };
+}
+
+async function seedMarketplaceRiders() {
+    const riderSeeds = [
+        {
+            email: "market-rider1@coinrise.local",
+            password: "rider123",
+            name: "Diego Marketplace",
+            displayName: "Diego Marketplace",
+            documentNumber: "99911122301",
+            cnhNumber: "CNHSEEDMKT001",
+            vehicleType: RiderVehicleType.MOTORCYCLE,
+            vehiclePlate: "MKT1A01",
+        },
+        {
+            email: "market-rider2@coinrise.local",
+            password: "rider123",
+            name: "Fernanda Marketplace",
+            displayName: "Fernanda Marketplace",
+            documentNumber: "99911122302",
+            cnhNumber: "CNHSEEDMKT002",
+            vehicleType: RiderVehicleType.MOTORCYCLE,
+            vehiclePlate: "MKT2B02",
+        },
+    ];
+
+    const riders = [];
+
+    for (const riderSeed of riderSeeds) {
+        const user = await upsertUser({
+            email: riderSeed.email,
+            password: riderSeed.password,
+            name: riderSeed.name,
+            role: UserRole.CUSTOMER,
+        });
+
+        const rider = await prisma.rider.upsert({
+            where: { userId: user.id },
+            update: {
+                ownerUserId: null,
+                displayName: riderSeed.displayName,
+                documentNumber: riderSeed.documentNumber,
+                cnhNumber: riderSeed.cnhNumber,
+                vehicleType: riderSeed.vehicleType,
+                vehiclePlate: riderSeed.vehiclePlate,
+                isStoreOwned: false,
+                status: RiderStatus.ACTIVE,
+                availabilityStatus: RiderAvailabilityStatus.OFFLINE,
+                incidentBlockedUntil: null,
+            },
+            create: {
+                userId: user.id,
+                ownerUserId: null,
+                displayName: riderSeed.displayName,
+                documentNumber: riderSeed.documentNumber,
+                cnhNumber: riderSeed.cnhNumber,
+                vehicleType: riderSeed.vehicleType,
+                vehiclePlate: riderSeed.vehiclePlate,
+                isStoreOwned: false,
+                status: RiderStatus.ACTIVE,
+                availabilityStatus: RiderAvailabilityStatus.OFFLINE,
+                incidentBlockedUntil: null,
+            },
+        });
+
+        riders.push({ user, rider, password: riderSeed.password });
+    }
+
+    return riders;
 }
 
 async function seedBot(userId, suffix) {
@@ -237,6 +309,7 @@ async function main() {
     await seedTenantCatalog(freeCustomer.id, "Luna", 3900);
     await seedTenantCatalog(paidCustomer.id, "Clara", 6900);
     await seedTransaction(paidCustomer.id);
+    const riders = await seedMarketplaceRiders();
 
     console.log("Admin:");
     console.log("  email: admin@coinrise.local");
@@ -247,10 +320,16 @@ async function main() {
     console.log("Paid customer:");
     console.log("  email: pro@coinrise.local");
     console.log("  password: pro123");
+    console.log("Marketplace riders:");
+    for (const { user, password } of riders) {
+        console.log(`  email: ${user.email}`);
+        console.log(`  password: ${password}`);
+    }
     console.log("Seed completed:", {
         adminId: admin.id,
         freeCustomerId: freeCustomer.id,
         paidCustomerId: paidCustomer.id,
+        riderIds: riders.map(({ rider }) => rider.id),
     });
 }
 

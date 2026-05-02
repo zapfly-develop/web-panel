@@ -6,7 +6,7 @@ import { connectWhatsappInstance } from "@/lib/whatsapp";
 export async function POST() {
     const session = await auth();
 
-    if (!session?.user?.id || session.user.isSuperAdmin) {
+    if (!session?.user?.id || session.user.isSuperAdmin || session.user.isRider) {
         return NextResponse.json(
             { error: "Sessao invalida para conectar o WhatsApp." },
             { status: 401 },

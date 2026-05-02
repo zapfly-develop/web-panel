@@ -1,14 +1,44 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { getAccessSummary } from "@/lib/saas/access";
 
-export default auth((req) => {
+const ADMIN_HOME = "/admin/dashboard";
+const STORE_HOME = "/dashboard";
+const RIDER_HOME = "/delivery/rider";
+const BILLING_HOME = "/billing";
+
+function matchesPath(pathname: string, path: string) {
+    return pathname === path || pathname.startsWith(`${path}/`);
+}
+
+function getSignedInHomePath(input: {
+    isSuperAdmin: boolean;
+    isRider: boolean;
+}) {
+    if (input.isSuperAdmin) {
+        return ADMIN_HOME;
+    }
+
+    if (input.isRider) {
+        return RIDER_HOME;
+    }
+
+    return STORE_HOME;
+}
+
+export default auth(async (req) => {
     const session = req.auth;
     const pathname = req.nextUrl.pathname;
-    const isLoggedIn = Boolean(session?.user?.id);
-    const isSuperAdmin = Boolean(session?.user?.isSuperAdmin);
-    const isRider = Boolean(session?.user?.isRider);
-    const hasActiveAccess = Boolean(session?.user?.hasActiveAccess);
+    const sessionUserId = session?.user?.id;
+    const isLoggedIn = Boolean(sessionUserId);
     const isApiRoute = pathname.startsWith("/api/");
+    const isAdminRoute = matchesPath(pathname, "/admin");
+    const isDashboardRoute = matchesPath(pathname, "/dashboard");
+    const isBillingRoute = matchesPath(pathname, "/billing");
+    const isRiderRoute = matchesPath(pathname, RIDER_HOME);
+    const isDashboardApiRoute = matchesPath(pathname, "/api/dashboard");
+    const isRiderApiRoute = matchesPath(pathname, "/api/delivery/rider");
 
     if (!isLoggedIn) {
         if (isApiRoute) {
@@ -21,7 +51,41 @@ export default auth((req) => {
         return NextResponse.redirect(new URL("/login", req.nextUrl));
     }
 
-    if (pathname.startsWith("/api/dashboard")) {
+    const dbUser = await prisma.user.findUnique({
+        where: { id: String(sessionUserId) },
+        include: {
+            subscription: true,
+            riderProfile: {
+                select: {
+                    id: true,
+                    status: true,
+                },
+            },
+        },
+    });
+
+    if (!dbUser) {
+        if (isApiRoute) {
+            return NextResponse.json(
+                { error: "Sessao invalida." },
+                { status: 401 },
+            );
+        }
+
+        return NextResponse.redirect(new URL("/login", req.nextUrl));
+    }
+
+    const access = getAccessSummary({
+        role: dbUser.role,
+        accessStatus: dbUser.accessStatus,
+        subscription: dbUser.subscription,
+        aiMessageLimitOverride: dbUser.aiMessageLimitOverride,
+    });
+    const isSuperAdmin = access.isSuperAdmin;
+    const isRider = Boolean(dbUser.riderProfile);
+    const hasActiveAccess = access.hasActiveAccess;
+
+    if (isDashboardApiRoute) {
         if (isSuperAdmin || isRider) {
             return NextResponse.json(
                 { error: "Acesso nao permitido para este usuario." },
@@ -32,57 +96,65 @@ export default auth((req) => {
         return NextResponse.next();
     }
 
-    if (pathname.startsWith("/admin")) {
-        if (!isSuperAdmin) {
-            return NextResponse.redirect(
-                new URL(isRider ? "/delivery/rider" : "/dashboard", req.nextUrl),
+    if (isRiderApiRoute) {
+        if (isSuperAdmin || !isRider) {
+            return NextResponse.json(
+                { error: "Acesso exclusivo para entregadores." },
+                { status: 403 },
             );
         }
 
         return NextResponse.next();
     }
 
-    if (pathname.startsWith("/billing")) {
-        if (isSuperAdmin) {
+    if (isAdminRoute) {
+        if (!isSuperAdmin) {
             return NextResponse.redirect(
-                new URL("/admin/dashboard", req.nextUrl),
+                new URL(
+                    getSignedInHomePath({ isSuperAdmin, isRider }),
+                    req.nextUrl,
+                ),
             );
+        }
+
+        return NextResponse.next();
+    }
+
+    if (isBillingRoute) {
+        if (isSuperAdmin) {
+            return NextResponse.redirect(new URL(ADMIN_HOME, req.nextUrl));
         }
 
         if (isRider) {
-            return NextResponse.redirect(new URL("/delivery/rider", req.nextUrl));
+            return NextResponse.redirect(new URL(RIDER_HOME, req.nextUrl));
         }
 
         return NextResponse.next();
     }
 
-    if (pathname.startsWith("/delivery/rider")) {
+    if (isRiderRoute) {
         if (isSuperAdmin) {
-            return NextResponse.redirect(
-                new URL("/admin/dashboard", req.nextUrl),
-            );
+            return NextResponse.redirect(new URL(ADMIN_HOME, req.nextUrl));
         }
 
         if (!isRider) {
-            return NextResponse.redirect(new URL("/dashboard", req.nextUrl));
+            return NextResponse.redirect(new URL(STORE_HOME, req.nextUrl));
         }
 
         return NextResponse.next();
     }
 
-    if (pathname.startsWith("/dashboard")) {
+    if (isDashboardRoute) {
         if (isSuperAdmin) {
-            return NextResponse.redirect(
-                new URL("/admin/dashboard", req.nextUrl),
-            );
+            return NextResponse.redirect(new URL(ADMIN_HOME, req.nextUrl));
         }
 
         if (isRider) {
-            return NextResponse.redirect(new URL("/delivery/rider", req.nextUrl));
+            return NextResponse.redirect(new URL(RIDER_HOME, req.nextUrl));
         }
 
         if (!hasActiveAccess) {
-            return NextResponse.redirect(new URL("/billing", req.nextUrl));
+            return NextResponse.redirect(new URL(BILLING_HOME, req.nextUrl));
         }
     }
 
@@ -96,5 +168,6 @@ export const config = {
         "/billing/:path*",
         "/delivery/rider/:path*",
         "/api/dashboard/:path*",
+        "/api/delivery/rider/:path*",
     ],
 };

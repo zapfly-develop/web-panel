@@ -311,8 +311,8 @@ Env vars:
 Formula atual:
 
 - distancia = Haversine em linha reta entre coordenadas da loja e do cliente;
-- taxa de entrega = taxa base + distancia em km \* preco por km;
-- repasse = taxa de entrega \* percentual de repasse.
+- taxa de entrega = taxa base + distancia em km * preco por km;
+- repasse = taxa de entrega * percentual de repasse.
 
 Configuracao:
 

@@ -9,7 +9,7 @@ const allowedStatuses = new Set(["AVAILABLE", "OFFLINE", "BUSY", "ONLINE"]);
 export async function PATCH(request: Request) {
     const session = await auth();
 
-    if (!session?.user?.id || session.user.isSuperAdmin) {
+    if (!session?.user?.id || session.user.isSuperAdmin || !session.user.isRider) {
         return NextResponse.json(
             { error: "Sessao invalida para alterar disponibilidade." },
             { status: 401 },

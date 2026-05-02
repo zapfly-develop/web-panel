@@ -5,11 +5,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     AlertCircle,
     Bike,
-    Home,
+    ChevronLeft,
+    Clock3,
     Loader2,
-    Menu,
+    MapPin,
+    MessageCircle,
+    MoreHorizontal,
+    Navigation2,
+    Phone,
     RefreshCw,
     Route,
+    Store,
     User,
     WalletCards,
 } from "lucide-react";
@@ -38,11 +44,6 @@ import type {
     DeliveryStatusChangedEvent,
     StoreDelivery,
 } from "../services/delivery-types";
-import {
-    reportClientAbsent,
-    reportRiderIncident,
-} from "../services/delivery-api";
-import { DailyStats } from "../components/optional-components";
 import { DeliveryMap } from "../components/delivery-map";
 import { ensureRiderPushSubscription } from "../services/push-notification";
 
@@ -206,7 +207,6 @@ export function RiderDashboard({
     const [runningAction, setRunningAction] = useState<DeliveryAction | null>(
         null,
     );
-    const [activeTab, setActiveTab] = useState<"home" | "delivery">("home");
     const [isIncidentDialogOpen, setIsIncidentDialogOpen] = useState(false);
     const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
     const [isNavigationDialogOpen, setIsNavigationDialogOpen] = useState(false);
@@ -534,26 +534,29 @@ export function RiderDashboard({
         try {
             setRunningAction(action);
 
-            if (action === "incident") {
-                await reportRiderIncident(
-                    userId,
-                    activeDelivery.id,
-                    payload as { reason: string; description?: string },
-                );
-            } else if (action === "absent") {
-                await reportClientAbsent(
-                    userId,
-                    activeDelivery.id,
-                    payload ? { description: payload.description } : undefined,
-                );
-            } else {
-                await fetchJson(
-                    `/api/delivery/rider/deliveries/${activeDelivery.id}/${action}`,
-                    {
-                        method: "POST",
-                    },
-                );
-            }
+            const endpoint =
+                action === "incident"
+                    ? "incidents"
+                    : action === "absent"
+                      ? "client-absent"
+                      : action;
+            const requestInit: RequestInit =
+                action === "incident" || action === "absent"
+                    ? {
+                          method: "POST",
+                          headers: {
+                              "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify(payload ?? {}),
+                      }
+                    : {
+                          method: "POST",
+                      };
+
+            await fetchJson(
+                `/api/delivery/rider/deliveries/${activeDelivery.id}/${endpoint}`,
+                requestInit,
+            );
 
             await Promise.all([refreshActiveDelivery(), refreshProfile()]);
 
@@ -569,9 +572,6 @@ export function RiderDashboard({
 
             toast.success(`Operação ${actionCopy[action]} concluída.`);
 
-            if (action === "incident") {
-                setActiveTab("home");
-            }
         } catch (error) {
             toast.error(
                 error instanceof Error
@@ -644,198 +644,373 @@ export function RiderDashboard({
         profile.location?.longitude ??
         profile.currentLongitude ??
         null;
+    const statusLabel =
+        activeDelivery?.status.replaceAll("_", " ") ?? statusCopy.label;
+    const shortOrderId = activeDelivery?.orderId.slice(-6) ?? null;
+    const pickupLabel =
+        activeDelivery?.pickupAddress ||
+        activeDelivery?.ownerUser?.storeAddress ||
+        "Retirada na loja";
+    const destinationLabel =
+        activeDelivery?.destinationAddress ||
+        activeDelivery?.order.deliveryAddress ||
+        "Destino do cliente";
+    const storeLabel = activeDelivery?.ownerUser?.name || "Loja parceira";
+    const vehicleLabel =
+        profile.vehiclePlate ||
+        (profile.vehicleType === "MOTORCYCLE"
+            ? "Moto"
+            : profile.vehicleType === "BICYCLE"
+              ? "Bicicleta"
+              : profile.vehicleType === "CAR"
+                ? "Carro"
+                : "Veiculo");
+    const whatsappDigits =
+        activeDelivery?.order.customerWhatsappId?.replace(/\D/g, "") ?? "";
+    const customerWhatsappUrl = whatsappDigits
+        ? `https://wa.me/${whatsappDigits}`
+        : null;
+    const storePhoneDigits =
+        activeDelivery?.ownerUser?.phone?.replace(/[^\d+]/g, "") ?? "";
+    const storePhoneHref = storePhoneDigits ? `tel:${storePhoneDigits}` : null;
+    const estimatedMinutes = activeDelivery?.distanceMeters
+        ? Math.max(8, Math.round((activeDelivery.distanceMeters / 1000) * 4))
+        : null;
+    const deliveryTimeLabel = estimatedMinutes
+        ? `${estimatedMinutes} min`
+        : activeDelivery
+          ? "Em andamento"
+          : isOnline
+            ? "Aguardando"
+            : "Offline";
+    const onlineSecondsToday =
+        dailyStats.onlineSeconds +
+        (isOnline && onlineStartedAtRef.current
+            ? Math.floor((Date.now() - onlineStartedAtRef.current) / 1000)
+            : 0);
+    const activeHoursLabel = `${(onlineSecondsToday / 3600).toFixed(1)}h`;
 
     return (
-        <main className="relative min-h-dvh bg-gradient-to-b from-slate-50 to-slate-100 pb-20">
-            {/* Header */}
-            <header className="sticky top-0 z-10 bg-white shadow-sm">
-                <div className="mx-auto max-w-md px-4 py-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="relative">
-                                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-sky-400 to-sky-600 text-white shadow-md">
-                                    <User className="h-6 w-6" />
-                                </div>
-                                <div
-                                    className={cn(
-                                        "absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white",
-                                        statusCopy.dotColor,
-                                    )}
-                                />
-                            </div>
-                            <div>
-                                <p className="text-xs font-medium text-sky-600">
-                                    Olá, entregador
-                                </p>
-                                <h1 className="text-lg font-bold text-slate-950">
-                                    {profile.displayName || "Zaply Rider"}
-                                </h1>
-                            </div>
+        <main className="min-h-dvh bg-slate-950 text-white md:bg-slate-900">
+            <div className="relative mx-auto min-h-dvh max-w-md overflow-hidden bg-slate-950 shadow-2xl md:my-6 md:min-h-[860px]">
+                <div className="absolute inset-0">
+                    <DeliveryMap
+                        pickupLat={activeDelivery?.pickupLatitude}
+                        pickupLng={activeDelivery?.pickupLongitude}
+                        destLat={activeDelivery?.destinationLatitude}
+                        destLng={activeDelivery?.destinationLongitude}
+                        riderLat={riderLatitude}
+                        riderLng={riderLongitude}
+                        status={activeDelivery?.status}
+                        distanceKm={
+                            activeDelivery?.distanceMeters
+                                ? activeDelivery.distanceMeters / 1000
+                                : undefined
+                        }
+                        className="rounded-none bg-slate-900 shadow-none"
+                    />
+                    <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.48)_0%,rgba(2,6,23,0.12)_34%,rgba(2,6,23,0)_48%,rgba(2,6,23,0.86)_100%)]" />
+                </div>
+
+                <header className="absolute inset-x-0 top-0 z-20 px-4 pt-[calc(env(safe-area-inset-top)+1rem)]">
+                    <div className="grid grid-cols-[44px_1fr_44px] items-center gap-3">
+                        <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => window.history.back()}
+                            className="h-11 w-11 rounded-full bg-slate-950/55 text-white backdrop-blur hover:bg-slate-950/70 hover:text-white"
+                        >
+                            <ChevronLeft className="h-5 w-5" />
+                        </Button>
+                        <div className="min-w-0 text-center">
+                            <p className="truncate text-sm font-semibold text-white">
+                                {activeDelivery
+                                    ? "Acompanhar corrida"
+                                    : "Zaply Rider"}
+                            </p>
+                            <p className="truncate text-xs text-white/70">
+                                {profile.displayName || "Entregador"}
+                            </p>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => void refreshRiderState()}
-                                disabled={isRefreshing}
-                                className="h-10 w-10 rounded-full"
-                            >
+                        <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            onClick={() =>
+                                activeDelivery
+                                    ? setIsActionsMenuOpen(true)
+                                    : void refreshRiderState()
+                            }
+                            disabled={!activeDelivery && isRefreshing}
+                            className="h-11 w-11 rounded-full bg-slate-950/55 text-white backdrop-blur hover:bg-slate-950/70 hover:text-white"
+                        >
+                            {activeDelivery ? (
+                                <MoreHorizontal className="h-5 w-5" />
+                            ) : (
                                 <RefreshCw
                                     className={cn(
-                                        "h-5 w-5 text-slate-600",
+                                        "h-5 w-5",
                                         isRefreshing && "animate-spin",
                                     )}
                                 />
-                            </Button>
-                            <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                className="h-10 w-10 rounded-full"
-                            >
-                                <Menu className="h-5 w-5 text-slate-600" />
-                            </Button>
-                        </div>
+                            )}
+                        </Button>
                     </div>
-                </div>
-            </header>
+                </header>
 
-            {/* Content */}
-            <div className="mx-auto max-w-md px-3 py-3">
-                <div className="relative h-[calc(100dvh-172px)] overflow-hidden rounded-xl bg-slate-200 shadow-lg">
+                {activeDelivery ? (
+                    <div className="pointer-events-none absolute left-4 top-[calc(env(safe-area-inset-top)+5.5rem)] z-10 flex flex-wrap gap-2">
+                        {shortOrderId ? (
+                            <Badge className="border border-white/10 bg-slate-950/65 text-white shadow-lg backdrop-blur">
+                                #{shortOrderId}
+                            </Badge>
+                        ) : null}
+                        <Badge className="border border-sky-200/20 bg-primary/90 text-white shadow-lg shadow-primary/20 backdrop-blur">
+                            {statusLabel}
+                        </Badge>
+                    </div>
+                ) : null}
+
+                <section className="absolute inset-x-0 bottom-0 z-20 max-h-[68dvh] overflow-y-auto rounded-t-[2rem] bg-slate-950/95 px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 shadow-2xl shadow-black/40 backdrop-blur-xl">
+                    <div className="mx-auto mb-5 h-1.5 w-14 rounded-full bg-white/20" />
+
                     {activeDelivery ? (
                         <>
-                            <DeliveryMap
-                                pickupLat={activeDelivery.pickupLatitude}
-                                pickupLng={activeDelivery.pickupLongitude}
-                                destLat={activeDelivery.destinationLatitude}
-                                destLng={activeDelivery.destinationLongitude}
-                                riderLat={riderLatitude}
-                                riderLng={riderLongitude}
-                                status={activeDelivery.status}
-                                distanceKm={
-                                    activeDelivery.distanceMeters
-                                        ? activeDelivery.distanceMeters / 1000
-                                        : undefined
-                                }
-                            />
-                            <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between gap-2">
-                                <Badge className="bg-slate-900/90 text-white shadow">
-                                    #{activeDelivery.orderId.slice(-6)}
-                                </Badge>
-                                <Badge className="bg-sky-600/90 text-white shadow">
-                                    {activeDelivery.status.replaceAll("_", " ")}
-                                </Badge>
-                            </div>
-                            <div className="absolute inset-x-3 bottom-3 space-y-2">
-                                <div className="rounded-xl bg-white/95 p-3 shadow backdrop-blur">
-                                    <p className="text-xs text-slate-500">
-                                        Cliente
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="text-2xl font-semibold tracking-tight text-white">
+                                        Detalhes da corrida
                                     </p>
-                                    <p className="font-semibold text-slate-900">
-                                        {customerLabel}
-                                    </p>
-                                    <p className="line-clamp-2 text-sm text-slate-600">
-                                        {activeDelivery.destinationAddress}
+                                    <p className="mt-1 truncate text-sm text-white/55">
+                                        {storeLabel}
                                     </p>
                                 </div>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {canAccept ? (
-                                        <Button
-                                            className={cn(
-                                                "h-12 bg-sky-600 hover:bg-sky-700",
-                                                justAccepted && "animate-pulse",
-                                            )}
-                                            onClick={() =>
-                                                runDeliveryAction("accept")
-                                            }
-                                            disabled={!!runningAction}
-                                        >
-                                            {runningAction === "accept" ? (
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            ) : null}
-                                            Aceitar
-                                        </Button>
-                                    ) : null}
-                                    {canPickUp ? (
-                                        <Button
-                                            className={cn(
-                                                "h-12 bg-amber-600 hover:bg-amber-700",
-                                                justPickedUp && "animate-pulse",
-                                            )}
-                                            onClick={() =>
-                                                runDeliveryAction("pick-up")
-                                            }
-                                            disabled={!!runningAction}
-                                        >
-                                            {runningAction === "pick-up" ? (
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            ) : null}
-                                            Coletar
-                                        </Button>
-                                    ) : null}
-                                    {canStartNavigation ? (
-                                        <Button
-                                            variant="outline"
-                                            className="h-12 border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100"
-                                            onClick={() =>
-                                                setIsNavigationDialogOpen(true)
-                                            }
-                                        >
-                                            Iniciar navegação
-                                        </Button>
-                                    ) : null}
-                                    {canComplete ? (
-                                        <Button
-                                            className="h-12 bg-emerald-600 hover:bg-emerald-700"
-                                            onClick={() =>
-                                                runDeliveryAction("complete")
-                                            }
-                                            disabled={
-                                                !!runningAction ||
-                                                activeDelivery.status ===
-                                                    "ABSENT_WAITING"
-                                            }
-                                        >
-                                            {runningAction === "complete" ? (
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            ) : null}
-                                            Finalizar
-                                        </Button>
-                                    ) : null}
+                                <div className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1 text-xs font-semibold text-sky-100">
+                                    {deliveryTimeLabel}
+                                </div>
+                            </div>
+
+                            <div className="mt-5 flex items-center gap-3">
+                                <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full border border-white/10 bg-slate-800">
+                                    <div className="flex h-full w-full items-center justify-center bg-[linear-gradient(135deg,rgba(14,165,233,0.25),rgba(15,23,42,0.9))]">
+                                        <User className="h-7 w-7 text-sky-100" />
+                                    </div>
+                                    <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-slate-950 bg-emerald-400" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <p className="truncate text-base font-semibold text-white">
+                                        {customerLabel}
+                                    </p>
+                                    <p className="truncate text-xs text-white/45">
+                                        {vehicleLabel}
+                                    </p>
+                                </div>
+                                <div className="flex shrink-0 gap-2">
                                     <Button
-                                        variant="outline"
-                                        className="h-12 border-slate-300 bg-white/90"
-                                        onClick={() =>
-                                            setIsActionsMenuOpen(true)
-                                        }
+                                        type="button"
+                                        size="icon"
+                                        variant="ghost"
+                                        disabled={!storePhoneHref}
+                                        onClick={() => {
+                                            if (storePhoneHref) {
+                                                window.location.href =
+                                                    storePhoneHref;
+                                            }
+                                        }}
+                                        className="h-11 w-11 rounded-full bg-white/10 text-white hover:bg-white/15 hover:text-white disabled:opacity-40"
                                     >
-                                        Mais opções
+                                        <Phone className="h-5 w-5" />
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        size="icon"
+                                        variant="ghost"
+                                        disabled={!customerWhatsappUrl}
+                                        onClick={() => {
+                                            if (customerWhatsappUrl) {
+                                                window.open(
+                                                    customerWhatsappUrl,
+                                                    "_blank",
+                                                    "noopener,noreferrer",
+                                                );
+                                            }
+                                        }}
+                                        className="relative h-11 w-11 rounded-full bg-white/10 text-white hover:bg-white/15 hover:text-white disabled:opacity-40"
+                                    >
+                                        <MessageCircle className="h-5 w-5" />
+                                        {customerWhatsappUrl ? (
+                                            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-primary ring-2 ring-slate-950" />
+                                        ) : null}
                                     </Button>
                                 </div>
                             </div>
+
+                            <div className="mt-5 space-y-3 rounded-lg bg-white/[0.045] p-4 ring-1 ring-white/10">
+                                <div className="flex gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-sky-100">
+                                        <Clock3 className="h-5 w-5" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-xs text-white/45">
+                                            Tempo de entrega
+                                        </p>
+                                        <p className="text-sm font-medium text-white">
+                                            {deliveryTimeLabel}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-sky-100">
+                                        <Store className="h-5 w-5" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-xs text-white/45">
+                                            Retirada
+                                        </p>
+                                        <p className="line-clamp-2 text-sm font-medium text-white">
+                                            {pickupLabel}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-sky-100">
+                                        <MapPin className="h-5 w-5" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-xs text-white/45">
+                                            Destino
+                                        </p>
+                                        <p className="line-clamp-2 text-sm font-medium text-white">
+                                            {destinationLabel}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mt-4 grid grid-cols-2 gap-2">
+                                {canAccept ? (
+                                    <Button
+                                        className={cn(
+                                            "col-span-2 h-12 bg-primary text-white shadow-lg shadow-primary/20 hover:bg-primary/90",
+                                            justAccepted && "animate-pulse",
+                                        )}
+                                        onClick={() =>
+                                            void runDeliveryAction("accept")
+                                        }
+                                        disabled={!!runningAction}
+                                    >
+                                        {runningAction === "accept" ? (
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        ) : null}
+                                        Aceitar corrida
+                                    </Button>
+                                ) : null}
+                                {canPickUp ? (
+                                    <Button
+                                        className={cn(
+                                            "h-12 bg-amber-500 text-slate-950 hover:bg-amber-400",
+                                            justPickedUp && "animate-pulse",
+                                        )}
+                                        onClick={() =>
+                                            void runDeliveryAction("pick-up")
+                                        }
+                                        disabled={!!runningAction}
+                                    >
+                                        {runningAction === "pick-up" ? (
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        ) : null}
+                                        Coletar
+                                    </Button>
+                                ) : null}
+                                {canStartNavigation ? (
+                                    <Button
+                                        variant="outline"
+                                        className="h-12 border-primary/25 bg-primary/15 text-sky-50 hover:bg-primary/25 hover:text-white"
+                                        onClick={() =>
+                                            setIsNavigationDialogOpen(true)
+                                        }
+                                    >
+                                        <Navigation2 className="mr-2 h-4 w-4" />
+                                        Navegar
+                                    </Button>
+                                ) : null}
+                                {canComplete ? (
+                                    <Button
+                                        className="h-12 bg-emerald-500 text-slate-950 hover:bg-emerald-400"
+                                        onClick={() =>
+                                            void runDeliveryAction("complete")
+                                        }
+                                        disabled={
+                                            !!runningAction ||
+                                            activeDelivery.status ===
+                                                "ABSENT_WAITING"
+                                        }
+                                    >
+                                        {runningAction === "complete" ? (
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        ) : null}
+                                        Finalizar
+                                    </Button>
+                                ) : null}
+                                <Button
+                                    variant="outline"
+                                    className="h-12 border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                                    onClick={() => setIsActionsMenuOpen(true)}
+                                >
+                                    Mais opções
+                                </Button>
+                            </div>
                         </>
                     ) : (
-                        <div className="flex h-full flex-col justify-between p-4">
-                            <div className="rounded-xl bg-white/95 p-4 text-left shadow">
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <>
+                            <div className="flex items-center gap-3">
+                                <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary/15 text-sky-100 ring-1 ring-primary/25">
+                                    <Bike className="h-7 w-7" />
+                                    <span
+                                        className={cn(
+                                            "absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-slate-950",
+                                            statusCopy.dotColor,
+                                        )}
+                                    />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <p className="truncate text-xl font-semibold text-white">
+                                        {profile.displayName || "Zaply Rider"}
+                                    </p>
+                                    <p className="truncate text-sm text-white/50">
+                                        {vehicleLabel}
+                                    </p>
+                                </div>
+                                <Badge className={cn("border", statusCopy.className)}>
+                                    {statusCopy.label}
+                                </Badge>
+                            </div>
+
+                            <div className="mt-5 rounded-lg bg-white/[0.045] p-4 ring-1 ring-white/10">
+                                <p className="text-xs font-semibold uppercase text-white/45">
                                     Status operacional
                                 </p>
-                                <p className="mt-1 text-2xl font-bold text-slate-900">
-                                    {isOnline ? "Online" : "Offline"}
-                                </p>
-                                <p className="text-sm text-slate-500">
-                                    Ative seu status para receber chamadas em
-                                    tempo real.
-                                </p>
+                                <div className="mt-2 flex items-end justify-between gap-3">
+                                    <div>
+                                        <p className="text-3xl font-semibold text-white">
+                                            {isOnline ? "Online" : "Offline"}
+                                        </p>
+                                        <p className="mt-1 text-sm text-white/55">
+                                            {isOnline
+                                                ? "Você está disponível para novas corridas."
+                                                : "Ative para receber chamadas em tempo real."}
+                                        </p>
+                                    </div>
+                                    <Route className="h-9 w-9 shrink-0 text-primary" />
+                                </div>
                                 <Button
                                     type="button"
                                     className={cn(
-                                        "mt-4 w-full h-12",
+                                        "mt-4 h-12 w-full",
                                         isOnline
-                                            ? "bg-slate-800 hover:bg-slate-900"
-                                            : "bg-emerald-600 hover:bg-emerald-700",
+                                            ? "bg-white/10 text-white hover:bg-white/15"
+                                            : "bg-primary text-white shadow-lg shadow-primary/20 hover:bg-primary/90",
                                     )}
                                     disabled={
                                         !isActiveRider || isChangingAvailability
@@ -852,52 +1027,48 @@ export function RiderDashboard({
                                         : "Ficar online"}
                                 </Button>
                             </div>
-                            <div className="rounded-xl bg-white p-1 shadow">
-                                <DailyStats
-                                    deliveriesCompleted={
-                                        dailyStats.deliveriesCompleted
-                                    }
-                                    totalEarnings={dailyStats.totalEarnings}
-                                    hoursActive={
-                                        (dailyStats.onlineSeconds +
-                                            (isOnline &&
-                                            onlineStartedAtRef.current
-                                                ? Math.floor(
-                                                      (Date.now() -
-                                                          onlineStartedAtRef.current) /
-                                                          1000,
-                                                  )
-                                                : 0)) /
-                                        3600
-                                    }
-                                    averageRating={4.9}
-                                />
+
+                            <div className="mt-3 grid grid-cols-3 gap-2">
+                                <div className="rounded-lg bg-white/[0.045] p-3 ring-1 ring-white/10">
+                                    <p className="text-xs text-white/45">
+                                        Entregas
+                                    </p>
+                                    <p className="mt-1 text-lg font-semibold text-white">
+                                        {dailyStats.deliveriesCompleted}
+                                    </p>
+                                </div>
+                                <div className="rounded-lg bg-white/[0.045] p-3 ring-1 ring-white/10">
+                                    <p className="text-xs text-white/45">
+                                        Ganhos
+                                    </p>
+                                    <p className="mt-1 text-lg font-semibold text-white">
+                                        {formatMoney(dailyStats.totalEarnings)}
+                                    </p>
+                                </div>
+                                <div className="rounded-lg bg-white/[0.045] p-3 ring-1 ring-white/10">
+                                    <p className="text-xs text-white/45">
+                                        Online
+                                    </p>
+                                    <p className="mt-1 text-lg font-semibold text-white">
+                                        {activeHoursLabel}
+                                    </p>
+                                </div>
                             </div>
-                            <div className="rounded-xl border border-slate-200 bg-white/95 p-4 text-center shadow-sm">
-                                <Route className="mx-auto h-8 w-8 text-slate-400" />
-                                <p className="mt-2 font-semibold text-slate-800">
-                                    Aguardando nova corrida
-                                </p>
-                                <p className="text-sm text-slate-500">
-                                    Quando uma entrega chegar, o mapa entra em
-                                    foco total.
-                                </p>
-                            </div>
+
                             {availableOffer ? (
-                                <div className="rounded-xl border border-sky-200 bg-sky-50/95 p-4 text-left shadow-sm">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
+                                <div className="mt-3 rounded-lg border border-primary/25 bg-primary/10 p-4 text-left shadow-lg shadow-primary/10">
+                                    <p className="text-xs font-semibold uppercase text-sky-100">
                                         Nova entrega disponível
                                     </p>
-                                    <p className="mt-1 text-sm font-medium text-slate-800">
-                                        Pedido #
-                                        {availableOffer.orderId.slice(-6)}
+                                    <p className="mt-1 text-sm font-medium text-white">
+                                        Pedido #{availableOffer.orderId.slice(-6)}
                                     </p>
-                                    <p className="mt-1 text-sm text-slate-600">
+                                    <p className="mt-1 line-clamp-2 text-sm text-white/60">
                                         {availableOffer.destinationAddress}
                                     </p>
                                     {typeof availableOffer.riderPayoutCents ===
                                     "number" ? (
-                                        <p className="mt-2 text-sm font-semibold text-emerald-700">
+                                        <p className="mt-2 text-sm font-semibold text-emerald-300">
                                             Repasse previsto:{" "}
                                             {formatMoney(
                                                 availableOffer.riderPayoutCents,
@@ -905,7 +1076,7 @@ export function RiderDashboard({
                                         </p>
                                     ) : null}
                                     <Button
-                                        className="mt-3 h-11 w-full bg-sky-600 hover:bg-sky-700"
+                                        className="mt-3 h-11 w-full bg-primary text-white hover:bg-primary/90"
                                         onClick={() =>
                                             void (async () => {
                                                 try {
@@ -943,10 +1114,32 @@ export function RiderDashboard({
                                         Aceitar corrida
                                     </Button>
                                 </div>
-                            ) : null}
-                        </div>
+                            ) : (
+                                <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.035] p-4 text-center">
+                                    <Route className="mx-auto h-8 w-8 text-white/35" />
+                                    <p className="mt-2 font-semibold text-white">
+                                        Aguardando nova corrida
+                                    </p>
+                                    <p className="text-sm text-white/50">
+                                        Quando uma entrega chegar, o mapa entra
+                                        em foco total.
+                                    </p>
+                                </div>
+                            )}
+
+                            <Button
+                                asChild
+                                variant="outline"
+                                className="mt-3 h-11 w-full border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                            >
+                                <Link href="/delivery/rider/wallet">
+                                    <WalletCards className="mr-2 h-4 w-4" />
+                                    Carteira
+                                </Link>
+                            </Button>
+                        </>
                     )}
-                </div>
+                </section>
             </div>
 
             <Dialog
@@ -1064,56 +1257,6 @@ export function RiderDashboard({
                     </div>
                 </DialogContent>
             </Dialog>
-            {/* Bottom Navigation */}
-            <nav className="fixed bottom-0 left-0 right-0 z-10 border-t border-slate-200 bg-white shadow-lg">
-                <div className="mx-auto flex max-w-md items-center justify-around py-2">
-                    <button
-                        onClick={() => setActiveTab("home")}
-                        className={cn(
-                            "flex flex-col items-center gap-1 rounded-xl px-6 py-2 transition-colors",
-                            activeTab === "home"
-                                ? "text-sky-600"
-                                : "text-slate-400 hover:text-slate-600",
-                        )}
-                    >
-                        <Home
-                            className={cn(
-                                "h-6 w-6",
-                                activeTab === "home" && "fill-current",
-                            )}
-                        />
-                        <span className="text-xs font-medium">Início</span>
-                    </button>
-                    <button
-                        onClick={() => setActiveTab("delivery")}
-                        className={cn(
-                            "flex flex-col items-center gap-1 rounded-xl px-6 py-2 transition-colors",
-                            activeTab === "delivery"
-                                ? "text-sky-600"
-                                : "text-slate-400 hover:text-slate-600",
-                        )}
-                    >
-                        <Bike
-                            className={cn(
-                                "h-6 w-6",
-                                activeTab === "delivery" && "fill-current",
-                            )}
-                        />
-                        <span className="text-xs font-medium">Entregas</span>
-                        {activeDelivery ? (
-                            <div className="absolute top-1.5 ml-6 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-white" />
-                        ) : null}
-                    </button>
-                    <Link
-                        href="/delivery/rider/wallet"
-                        className="flex flex-col items-center gap-1 rounded-xl px-6 py-2 text-slate-400 transition-colors hover:text-slate-600"
-                    >
-                        <WalletCards className="h-6 w-6" />
-                        <span className="text-xs font-medium">Carteira</span>
-                    </Link>
-                </div>
-            </nav>
-
             {/* Incident Dialog */}
             <Dialog
                 open={isIncidentDialogOpen}

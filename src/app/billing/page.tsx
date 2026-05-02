@@ -1,7 +1,7 @@
-import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { getUserWithSaasContext } from "@/lib/saas/server";
 import { getPlanCatalog } from "@/lib/saas/plans";
+import { requireStoreUser } from "@/lib/server-session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,22 +23,26 @@ function formatMoney(valueCents: number) {
     })}`;
 }
 
+function getPixCode(payload: unknown) {
+    if (
+        payload &&
+        typeof payload === "object" &&
+        "pix_code" in payload &&
+        typeof payload.pix_code === "string"
+    ) {
+        return payload.pix_code;
+    }
+
+    return null;
+}
+
 export default async function BillingPage({
     searchParams,
 }: {
     searchParams: SearchParams;
 }) {
-    const session = await auth();
-
-    if (!session?.user?.id) {
-        redirect("/login");
-    }
-
-    if (session.user.isSuperAdmin) {
-        redirect("/admin/dashboard");
-    }
-
-    const user = await getUserWithSaasContext(session.user.id);
+    const sessionUser = await requireStoreUser();
+    const user = await getUserWithSaasContext(sessionUser.id);
 
     if (!user) {
         redirect("/login");
@@ -52,7 +56,7 @@ export default async function BillingPage({
         : null;
     const checkoutPix =
         checkout?.status === TransactionStatus.PENDING
-            ? (checkout.rawPayload as any)?.pix_code
+            ? getPixCode(checkout.rawPayload)
             : null;
     const plans = getPlanCatalog();
 

@@ -1,4 +1,6 @@
 import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { getAccessSummary } from "@/lib/saas/access";
 import { redirect } from "next/navigation";
 
 export async function requireSessionUser() {
@@ -8,7 +10,43 @@ export async function requireSessionUser() {
         redirect("/login");
     }
 
-    return session.user;
+    const dbUser = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        include: {
+            subscription: true,
+            riderProfile: {
+                select: {
+                    id: true,
+                    status: true,
+                },
+            },
+        },
+    });
+
+    if (!dbUser) {
+        redirect("/login");
+    }
+
+    const access = getAccessSummary({
+        role: dbUser.role,
+        accessStatus: dbUser.accessStatus,
+        subscription: dbUser.subscription,
+        aiMessageLimitOverride: dbUser.aiMessageLimitOverride,
+    });
+
+    return {
+        id: dbUser.id,
+        name: dbUser.name,
+        email: dbUser.email,
+        role: dbUser.role,
+        accessStatus: dbUser.accessStatus,
+        planType: access.planType,
+        subscriptionStatus: dbUser.subscription?.status ?? null,
+        hasActiveAccess: access.hasActiveAccess,
+        isSuperAdmin: access.isSuperAdmin,
+        isRider: Boolean(dbUser.riderProfile),
+        riderStatus: dbUser.riderProfile?.status ?? null,
+    };
 }
 
 export async function requireSuperAdminUser() {
@@ -16,6 +54,20 @@ export async function requireSuperAdminUser() {
 
     if (!user.isSuperAdmin) {
         redirect("/dashboard");
+    }
+
+    return user;
+}
+
+export async function requireStoreUser() {
+    const user = await requireSessionUser();
+
+    if (user.isSuperAdmin) {
+        redirect("/admin/dashboard");
+    }
+
+    if (user.isRider) {
+        redirect("/delivery/rider");
     }
 
     return user;

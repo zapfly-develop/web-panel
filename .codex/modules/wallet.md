@@ -58,7 +58,7 @@ SyncPay/provedores:
 - pertence a `User` quando for conta de loja, entregador ou cliente;
 - possui moeda, saldo disponivel e saldo reservado materializado.
 - encapsula regras de saldo antes de qualquer update no banco.
-- possui `canWithdraw(amount)`, `deposit`, `withdraw`, `requestWithdrawal` e `applyTransaction`.
+- possui `canWithdraw(amount)`, `deposit`, `withdraw`, `requestWithdrawal`, `settleFrozenDebit`, `releaseFrozenCredit` e `applyTransaction`.
 
 Campos principais:
 
@@ -103,6 +103,7 @@ Tipos esperados:
 Categorias atuais:
 
 - `DELIVERY_PAYOUT`
+- `DELIVERY_ESCROW`
 - `WITHDRAWAL`
 - `REFUND`
 
@@ -138,7 +139,8 @@ Todo comando de lancamento deve informar:
 - Moeda deve ser explicita, inicialmente `BRL`.
 - Historico contabil nao deve ser editado; correcoes devem usar lancamentos de estorno ou ajuste quando essas categorias forem formalizadas.
 - Na implementacao atual, `COMPLETED` altera saldo disponivel.
-- `WITHDRAWAL/PENDING` tambem altera saldo: reduz `balanceCents` e aumenta `frozenBalanceCents`.
+- `WITHDRAWAL/PENDING` e `DELIVERY_ESCROW/PENDING` tambem alteram saldo: reduzem `balanceCents` e aumentam `frozenBalanceCents`.
+- `DELIVERY_ESCROW/COMPLETED` liquida saldo congelado ou libera escrow, conforme a decisao do modulo de origem.
 - Outros `PENDING` e `FAILED` registram ledger sem mudar saldo disponivel.
 - Debitos `COMPLETED` validam saldo suficiente.
 - Solicitacao de saque valida saldo suficiente antes de congelar o valor.
@@ -154,6 +156,10 @@ Todo comando de lancamento deve informar:
 - `deposit(input)`: registra credito `COMPLETED` de forma atomica.
 - `withdraw(input)`: registra debito `COMPLETED` de forma atomica e bloqueia saldo negativo.
 - `requestWithdrawal(input)`: cria saque `PENDING`, movendo valor de `balanceCents` para `frozenBalanceCents`.
+- `reserveDeliveryEscrow(input)`: cria reserva `DELIVERY_ESCROW/PENDING`, movendo valor da taxa de entrega para `frozenBalanceCents`.
+- `reserveDeliveryEscrowInTransaction(tx, input)`: variante para o modulo Delivery reservar escrow na mesma transaction da mudanca de estado.
+- `settleDeliveryEscrowInTransaction(tx, input)`: liquida escrow ja congelado quando o custo do retorno fica com a loja.
+- `releaseDeliveryEscrowInTransaction(tx, input)`: libera escrow ja congelado quando o Fundo de Seguranca cobre a ocorrencia.
 - `requestWithdrawalForUser(userId, input)`: helper para endpoint de solicitacao de saque.
 - `recordTransaction(input)`: API interna para registrar credito/debito com idempotencia.
 - `recordTransactionForUser(userId, input)`: helper para comandos internos com DTO.
@@ -166,7 +172,7 @@ Decisoes:
 - `WalletEntity` calcula saldo disponivel/congelado e impede saldo negativo.
 - `WalletTransactionEntity` cria lancamentos imutaveis com saldos antes/depois.
 - `deposit` e `withdraw` reaproveitam o mesmo caminho transacional de `recordTransaction`.
-- `requestWithdrawal` usa transacao propria porque precisa atualizar saldo disponivel e congelado ao mesmo tempo.
+- `requestWithdrawal`, `reserveDeliveryEscrow`, liquidacao e liberacao de escrow usam transacao propria ou transaction externa porque precisam atualizar saldo disponivel/congelado junto do ledger.
 - `idempotencyKey` e unica e evita duplicidade em retries.
 
 ## Endpoints
@@ -195,7 +201,7 @@ Filtros do extrato:
 - `dateFrom`: ISO date/datetime inicial, aplicado em `createdAt >= dateFrom`.
 - `dateTo`: ISO date/datetime final, aplicado em `createdAt <= dateTo`.
 - `type`: `CREDIT` ou `DEBIT`.
-- `category`: `DELIVERY_PAYOUT`, `WITHDRAWAL` ou `REFUND`.
+- `category`: `DELIVERY_PAYOUT`, `DELIVERY_ESCROW`, `WITHDRAWAL` ou `REFUND`.
 - `status`: `COMPLETED`, `PENDING` ou `FAILED`.
 - `take`: limite de itens, maximo 100.
 
@@ -203,6 +209,22 @@ Resposta do extrato:
 
 - `items`: lancamentos do ledger em ordem decrescente de `createdAt`.
 - `filters`: filtros normalizados aplicados.
+
+## Variaveis de Ambiente
+
+Obrigatoria:
+
+- `DATABASE_URL`
+
+Sem env propria:
+
+- Wallet nao possui variaveis especificas nesta etapa.
+- Saldos e transacoes ficam no PostgreSQL.
+- Saque ainda nao chama Pix real; apenas congela saldo.
+
+Dependencia indireta:
+
+- O credito automatico por `payout.processed` depende do Delivery, que usa Redis/BullMQ para processar a fila `delivery-payout`.
 
 ## Eventos
 
@@ -222,7 +244,7 @@ Eventos que Wallet deve emitir:
 - `wallet.withdrawal_completed`
 - `wallet.withdrawal_failed`
 
-## Fluxo Delivery Futuro
+## Fluxo Delivery
 
 1. `PayoutProcessor` conclui `DeliveryPayout`.
 2. Delivery emite `payout.processed` com valor final e referencia da entrega/payout.
@@ -230,7 +252,12 @@ Eventos que Wallet deve emitir:
 4. Wallet chama `deposit` com categoria `DELIVERY_PAYOUT`.
 5. A idempotencia usa `delivery-payout:<payoutId>:rider-credit`.
 
-Nesta etapa, o Wallet credita a carteira do entregador. Debito/reserva da loja para `STORE_DEBIT` fica para uma etapa posterior.
+No fluxo de cliente ausente, Delivery usa `reserveDeliveryEscrowInTransaction` para congelar a taxa de entrega da loja antes de mudar a entrega para `ABSENT_WAITING`.
+
+Quando a entrega muda para `RETURNING_TO_MERCHANT`, Delivery processa o payout do rider e decide o custo:
+
+- primeira ocorrencia mensal da loja: `FLOOVI_SAFETY_FUND`, com `releaseDeliveryEscrowInTransaction` devolvendo a reserva ao saldo da loja;
+- ocorrencias seguintes no mes: `STORE_DEBIT`, com `settleDeliveryEscrowInTransaction` liquidando a reserva congelada.
 
 ## Riscos
 

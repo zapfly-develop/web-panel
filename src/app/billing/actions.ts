@@ -6,16 +6,16 @@ import {
     activateFreePlan,
     createPaidPlanCheckout,
 } from "@/lib/saas/server";
-import { requireSessionUser } from "@/lib/server-session";
+import { requireStoreUser } from "@/lib/server-session";
 
 export async function activateFreePlanAction() {
-    const user = await requireSessionUser();
+    const user = await requireStoreUser();
     await activateFreePlan(user.id);
     redirect("/dashboard");
 }
 
 export async function checkoutPlanAction(formData: FormData) {
-    const user = await requireSessionUser();
+    const user = await requireStoreUser();
     const planType = String(formData.get("planType") ?? "") as PlanType;
 
     if (!Object.values(PlanType).includes(planType)) {

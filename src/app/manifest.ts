@@ -7,9 +7,9 @@ export default function manifest(): MetadataRoute.Manifest {
         short_name: "Zaply Rider",
         description: "App mobile do entregador Zaply.",
         start_url: "/delivery/rider",
-        scope: "/",
+        scope: "/delivery/",
         display: "standalone",
-        background_color: "#f8fafc",
+        background_color: "#020617",
         theme_color: "#0284c7",
         icons: [
             {

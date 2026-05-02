@@ -142,9 +142,15 @@ export default async function HomePage() {
     const panelHref = session?.user?.id
         ? session.user.isSuperAdmin
             ? "/admin/dashboard"
+            : session.user.isRider
+              ? "/delivery/rider"
             : "/dashboard"
         : "/login";
-    const primaryPlanCtaHref = session?.user?.id ? "/billing" : "/register";
+    const primaryPlanCtaHref = session?.user?.id
+        ? session.user.isRider
+            ? "/delivery/rider"
+            : "/billing"
+        : "/register";
 
     return (
         <main className="min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,#f7fbff_0%,#eef5ff_24%,#f8fafc_58%,#ffffff_100%)] text-slate-900">

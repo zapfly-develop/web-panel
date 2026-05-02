@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigation } from "lucide-react";
 import type { DeliveryStatus } from "../services/delivery-types";
 import { loadGoogleMaps } from "../../orders/services/google-maps-loader";
+import { cn } from "@/lib/utils";
 
 type DeliveryMapProps = {
     pickupLat?: number | null;
@@ -14,6 +15,7 @@ type DeliveryMapProps = {
     riderLng?: number | null;
     status?: DeliveryStatus | null;
     distanceKm?: number | null;
+    className?: string;
 };
 
 type LatLng = {
@@ -54,6 +56,7 @@ export function DeliveryMap({
     riderLng,
     status,
     distanceKm,
+    className,
 }: DeliveryMapProps) {
     const mapRef = useRef<HTMLDivElement | null>(null);
     const mapInstanceRef = useRef<google.maps.Map | null>(null);
@@ -207,7 +210,12 @@ export function DeliveryMap({
     }, [center, destination, pickup, rider, routeSegments]);
 
     return (
-        <div className="h-full overflow-hidden rounded-xl bg-white shadow-lg">
+        <div
+            className={cn(
+                "h-full overflow-hidden rounded-xl bg-white shadow-lg",
+                className,
+            )}
+        >
             <div className="relative h-full min-h-[56dvh] bg-slate-100">
                 <div ref={mapRef} className="h-full w-full" />
                 {mapStatus !== "ready" ? (

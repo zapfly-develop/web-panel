@@ -12,7 +12,7 @@ function normalizeCoordinate(value: unknown): number | null {
 export async function POST(request: Request) {
     const session = await auth();
 
-    if (!session?.user?.id || session.user.isSuperAdmin) {
+    if (!session?.user?.id || session.user.isSuperAdmin || !session.user.isRider) {
         return NextResponse.json(
             { error: "Sessao invalida para enviar localizacao." },
             { status: 401 },
