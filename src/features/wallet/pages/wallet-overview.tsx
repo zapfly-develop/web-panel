@@ -8,7 +8,9 @@ import {
     ArrowLeft,
     ArrowUpRight,
     Banknote,
+    Bike,
     Clock3,
+    Home,
     Loader2,
     RefreshCw,
     ShieldCheck,
@@ -200,7 +202,7 @@ export function WalletOverview({
     }
 
     return (
-        <main className="min-h-dvh bg-slate-50 pb-8">
+        <main className="min-h-dvh bg-slate-50 pb-24">
             <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
                 <div className="mx-auto flex max-w-md items-center justify-between px-4 py-4">
                     <div className="flex items-center gap-3">
@@ -399,6 +401,28 @@ export function WalletOverview({
                     </div>
                 </section>
             </div>
+            <nav className="fixed bottom-0 left-0 right-0 z-10 border-t border-slate-200 bg-white shadow-lg">
+                <div className="mx-auto flex max-w-md items-center justify-around py-2">
+                    <Link
+                        href="/delivery/rider"
+                        className="flex flex-col items-center gap-1 rounded-xl px-6 py-2 text-slate-400 transition-colors hover:text-slate-600"
+                    >
+                        <Home className="h-6 w-6" />
+                        <span className="text-xs font-medium">Início</span>
+                    </Link>
+                    <Link
+                        href="/delivery/rider"
+                        className="flex flex-col items-center gap-1 rounded-xl px-6 py-2 text-slate-400 transition-colors hover:text-slate-600"
+                    >
+                        <Bike className="h-6 w-6" />
+                        <span className="text-xs font-medium">Entregas</span>
+                    </Link>
+                    <div className="flex flex-col items-center gap-1 rounded-xl px-6 py-2 text-sky-600">
+                        <WalletCards className="h-6 w-6 fill-current" />
+                        <span className="text-xs font-medium">Carteira</span>
+                    </div>
+                </div>
+            </nav>
         </main>
     );
 }
