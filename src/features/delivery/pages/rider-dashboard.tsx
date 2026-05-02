@@ -799,6 +799,46 @@ export function RiderDashboard({
                                     foco total.
                                 </p>
                             </div>
+                            {availableOffer ? (
+                                <div className="rounded-xl border border-sky-200 bg-sky-50/95 p-4 text-left shadow-sm">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
+                                        Nova entrega disponível
+                                    </p>
+                                    <p className="mt-1 text-sm font-medium text-slate-800">
+                                        Pedido #{availableOffer.orderId.slice(-6)}
+                                    </p>
+                                    <p className="mt-1 text-sm text-slate-600">
+                                        {availableOffer.destinationAddress}
+                                    </p>
+                                    {typeof availableOffer.riderPayoutCents ===
+                                    "number" ? (
+                                        <p className="mt-2 text-sm font-semibold text-emerald-700">
+                                            Repasse previsto: {formatMoney(availableOffer.riderPayoutCents)}
+                                        </p>
+                                    ) : null}
+                                    <Button
+                                        className="mt-3 h-11 w-full bg-sky-600 hover:bg-sky-700"
+                                        onClick={() =>
+                                            void fetchJson(
+                                                `/api/delivery/rider/deliveries/${availableOffer.deliveryId}/accept`,
+                                                { method: "POST" },
+                                            ).then(async () => {
+                                                await Promise.all([
+                                                    refreshActiveDelivery(),
+                                                    refreshProfile(),
+                                                ]);
+                                                setAvailableOffer(null);
+                                                toast.success(
+                                                    "Entrega aceita com sucesso.",
+                                                );
+                                            })
+                                        }
+                                        disabled={!!runningAction}
+                                    >
+                                        Aceitar corrida
+                                    </Button>
+                                </div>
+                            ) : null}
                         </div>
                     )}
                 </div>
