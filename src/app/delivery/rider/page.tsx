@@ -11,8 +11,15 @@ import { requireRiderUser } from "@/lib/server-session";
 
 export const runtime = "nodejs";
 
-export default async function RiderAppPage() {
+type SearchParams = Promise<{ deliveryId?: string }>;
+
+export default async function RiderAppPage({
+    searchParams,
+}: {
+    searchParams: SearchParams;
+}) {
     const user = await requireRiderUser();
+    const params = await searchParams;
 
     let profile: DeliveryRider | null = null;
     let activeDelivery: StoreDelivery | null = null;
@@ -34,6 +41,7 @@ export default async function RiderAppPage() {
             initialProfile={profile}
             initialActiveDelivery={activeDelivery}
             loadError={loadError}
+            initialSelectedDeliveryId={params.deliveryId ?? null}
         />
     );
 }

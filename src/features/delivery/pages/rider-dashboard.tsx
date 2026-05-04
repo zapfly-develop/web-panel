@@ -7,6 +7,7 @@ import {
     Bike,
     ChevronLeft,
     Clock3,
+    ListChecks,
     Loader2,
     MapPin,
     MessageCircle,
@@ -36,7 +37,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useDeliveryRealtime } from "../hooks/use-delivery-realtime";
 import { useRiderLocation } from "../hooks/use-rider-location";
-import { useDeliveryContingencies } from "../hooks/use-delivery-contingencies";
 import type {
     DeliveryAssignedEvent,
     DeliveryRider,
@@ -46,31 +46,6 @@ import type {
 } from "../services/delivery-types";
 import { DeliveryMap } from "../components/delivery-map";
 import { ensureRiderPushSubscription } from "../services/push-notification";
-
-type PushSubscriptionPayload = {
-    endpoint: string;
-    expirationTime: number | null;
-    keys: {
-        p256dh: string;
-        auth: string;
-    };
-};
-
-function urlBase64ToUint8Array(base64String: string) {
-    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-    const normalized = (base64String + padding)
-        .replace(/-/g, "+")
-        .replace(/_/g, "/");
-
-    const rawData = window.atob(normalized);
-    const outputArray = new Uint8Array(rawData.length);
-
-    for (let i = 0; i < rawData.length; i += 1) {
-        outputArray[i] = rawData.charCodeAt(i);
-    }
-
-    return outputArray;
-}
 
 type NavigationApp = "google" | "waze" | "apple";
 
@@ -95,6 +70,7 @@ type RiderDashboardProps = {
     initialProfile: DeliveryRider | null;
     initialActiveDelivery: StoreDelivery | null;
     loadError: string | null;
+    initialSelectedDeliveryId?: string | null;
 };
 
 type DeliveryAction = "accept" | "pick-up" | "complete" | "incident" | "absent";
@@ -109,15 +85,15 @@ type RiderDailyStats = {
     onlineSeconds: number;
 };
 
+const AVAILABLE_OFFERS_MAX_AGE_MS = 45 * 60 * 1000;
+
 function getTodayStatsKey(userId: string) {
     const dayKey = new Date().toISOString().slice(0, 10);
     return `rider-daily-stats:${userId}:${dayKey}`;
 }
 
-function formatTime(value: string) {
-    return new Intl.DateTimeFormat("pt-BR", {
-        timeStyle: "short",
-    }).format(new Date(value));
+function getAvailableOffersKey(userId: string) {
+    return `rider-available-offers:${userId}`;
 }
 
 function formatMoney(valueCents: number, currency = "BRL") {
@@ -132,6 +108,60 @@ function isOperationallyOnline(profile: DeliveryRider | null) {
         profile?.availabilityStatus === "AVAILABLE" ||
         profile?.availabilityStatus === "BUSY"
     );
+}
+
+function isFreshAvailableOffer(offer: RiderNewAvailableDeliveryEvent) {
+    const timestamp = Date.parse(offer.timestamp);
+
+    if (!Number.isFinite(timestamp)) {
+        return true;
+    }
+
+    return Date.now() - timestamp <= AVAILABLE_OFFERS_MAX_AGE_MS;
+}
+
+function sortAvailableOffers(
+    offers: RiderNewAvailableDeliveryEvent[],
+): RiderNewAvailableDeliveryEvent[] {
+    return [...offers].sort((left, right) => {
+        if (Boolean(left.isHighPriority) !== Boolean(right.isHighPriority)) {
+            return left.isHighPriority ? -1 : 1;
+        }
+
+        return Date.parse(right.timestamp) - Date.parse(left.timestamp);
+    });
+}
+
+function upsertAvailableOffer(
+    offers: RiderNewAvailableDeliveryEvent[],
+    nextOffer: RiderNewAvailableDeliveryEvent,
+) {
+    const withoutCurrent = offers.filter(
+        (offer) => offer.deliveryId !== nextOffer.deliveryId,
+    );
+
+    return sortAvailableOffers(
+        [nextOffer, ...withoutCurrent].filter(isFreshAvailableOffer),
+    );
+}
+
+function getOfferTimeLabel(offer: RiderNewAvailableDeliveryEvent) {
+    const timestamp = Date.parse(offer.timestamp);
+
+    if (!Number.isFinite(timestamp)) {
+        return "Agora";
+    }
+
+    const elapsedMinutes = Math.max(
+        0,
+        Math.floor((Date.now() - timestamp) / 60000),
+    );
+
+    if (elapsedMinutes < 1) {
+        return "Agora";
+    }
+
+    return `${elapsedMinutes} min atrás`;
 }
 
 async function showRiderAssignmentNotification(deliveryId: string) {
@@ -199,6 +229,7 @@ export function RiderDashboard({
     initialProfile,
     initialActiveDelivery,
     loadError,
+    initialSelectedDeliveryId = null,
 }: RiderDashboardProps) {
     const [profile, setProfile] = useState(initialProfile);
     const [activeDelivery, setActiveDelivery] = useState(initialActiveDelivery);
@@ -210,10 +241,16 @@ export function RiderDashboard({
     const [isIncidentDialogOpen, setIsIncidentDialogOpen] = useState(false);
     const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
     const [isNavigationDialogOpen, setIsNavigationDialogOpen] = useState(false);
+    const [isOffersDialogOpen, setIsOffersDialogOpen] = useState(false);
+    const [isMenuCollapsed, setIsMenuCollapsed] = useState(false);
     const [incidentReason, setIncidentReason] = useState("");
     const [incidentDescription, setIncidentDescription] = useState("");
-    const [availableOffer, setAvailableOffer] =
-        useState<RiderNewAvailableDeliveryEvent | null>(null);
+    const [availableOffers, setAvailableOffers] = useState<
+        RiderNewAvailableDeliveryEvent[]
+    >([]);
+    const [selectedOfferId, setSelectedOfferId] = useState<string | null>(
+        initialSelectedDeliveryId,
+    );
     const [dailyStats, setDailyStats] = useState<RiderDailyStats>({
         deliveriesCompleted: 0,
         totalEarnings: 0,
@@ -227,6 +264,8 @@ export function RiderDashboard({
     const isActiveRider = profile?.status === "ACTIVE";
     const isOnline = isOperationallyOnline(profile);
     const activeDeliveryId = activeDelivery?.id ?? null;
+    const activeDeliveryStatus = activeDelivery?.status ?? null;
+    const activeDeliveryPayoutCents = activeDelivery?.riderPayoutCents ?? 0;
 
     const refreshProfile = useCallback(async () => {
         const nextProfile = await fetchJson<DeliveryRider>(
@@ -255,6 +294,12 @@ export function RiderDashboard({
 
     const handleDeliveryStatusChanged = useCallback(
         (event: DeliveryStatusChangedEvent) => {
+            setAvailableOffers((currentOffers) =>
+                currentOffers.filter(
+                    (offer) => offer.deliveryId !== event.deliveryId,
+                ),
+            );
+
             if (!profile || event.riderId !== profile.id) {
                 return;
             }
@@ -270,10 +315,10 @@ export function RiderDashboard({
 
     const handleDeliveryAssigned = useCallback(
         (event: DeliveryAssignedEvent) => {
-            setAvailableOffer((currentOffer) =>
-                currentOffer?.deliveryId === event.deliveryId
-                    ? null
-                    : currentOffer,
+            setAvailableOffers((currentOffers) =>
+                currentOffers.filter(
+                    (offer) => offer.deliveryId !== event.deliveryId,
+                ),
             );
             void showRiderAssignmentNotification(event.deliveryId);
             void refreshActiveDelivery();
@@ -290,7 +335,11 @@ export function RiderDashboard({
                 return;
             }
 
-            setAvailableOffer(event);
+            setAvailableOffers((currentOffers) =>
+                upsertAvailableOffer(currentOffers, event),
+            );
+            setSelectedOfferId((currentId) => currentId ?? event.deliveryId);
+            setIsMenuCollapsed(false);
 
             toast.info(
                 event.isHighPriority
@@ -338,8 +387,6 @@ export function RiderDashboard({
         },
     });
 
-    const contingencies = useDeliveryContingencies(activeDelivery);
-
     useEffect(() => {
         if (typeof window === "undefined") {
             return;
@@ -370,6 +417,58 @@ export function RiderDashboard({
     }, [dailyStats, userId]);
 
     useEffect(() => {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        const raw = window.localStorage.getItem(getAvailableOffersKey(userId));
+        if (!raw) return;
+
+        try {
+            const parsed = JSON.parse(
+                raw,
+            ) as RiderNewAvailableDeliveryEvent[];
+            const storedOffers = Array.isArray(parsed)
+                ? sortAvailableOffers(parsed.filter(isFreshAvailableOffer))
+                : [];
+
+            if (storedOffers.length > 0) {
+                setAvailableOffers((currentOffers) =>
+                    sortAvailableOffers(
+                        [...storedOffers, ...currentOffers].reduce<
+                            RiderNewAvailableDeliveryEvent[]
+                        >((offers, offer) => {
+                            if (
+                                offers.some(
+                                    (item) =>
+                                        item.deliveryId === offer.deliveryId,
+                                )
+                            ) {
+                                return offers;
+                            }
+
+                            return [...offers, offer];
+                        }, []),
+                    ),
+                );
+            }
+        } catch {
+            window.localStorage.removeItem(getAvailableOffersKey(userId));
+        }
+    }, [userId]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        window.localStorage.setItem(
+            getAvailableOffersKey(userId),
+            JSON.stringify(availableOffers.filter(isFreshAvailableOffer)),
+        );
+    }, [availableOffers, userId]);
+
+    useEffect(() => {
         if (isOnline && onlineStartedAtRef.current == null) {
             onlineStartedAtRef.current = Date.now();
         }
@@ -388,17 +487,16 @@ export function RiderDashboard({
     }, [isOnline]);
 
     useEffect(() => {
-        if (!activeDelivery || activeDelivery.status !== "DELIVERED") {
+        if (!activeDeliveryId || activeDeliveryStatus !== "DELIVERED") {
             return;
         }
 
         setDailyStats((current) => ({
             deliveriesCompleted: current.deliveriesCompleted + 1,
-            totalEarnings:
-                current.totalEarnings + (activeDelivery.riderPayoutCents || 0),
+            totalEarnings: current.totalEarnings + activeDeliveryPayoutCents,
             onlineSeconds: current.onlineSeconds,
         }));
-    }, [activeDelivery?.id, activeDelivery?.status]);
+    }, [activeDeliveryId, activeDeliveryPayoutCents, activeDeliveryStatus]);
 
     useEffect(() => {
         const interval = window.setInterval(
@@ -416,9 +514,23 @@ export function RiderDashboard({
 
     useEffect(() => {
         if (activeDelivery) {
-            setAvailableOffer(null);
+            setAvailableOffers([]);
+            setSelectedOfferId(null);
+            setIsOffersDialogOpen(false);
         }
     }, [activeDelivery]);
+
+    useEffect(() => {
+        if (activeDelivery) {
+            return;
+        }
+
+        if (selectedOfferId) {
+            return;
+        }
+
+        setSelectedOfferId(availableOffers[0]?.deliveryId ?? null);
+    }, [activeDelivery, availableOffers, selectedOfferId]);
 
     const statusCopy = useMemo(() => {
         if (!profile) {
@@ -512,6 +624,43 @@ export function RiderDashboard({
             );
         } finally {
             setIsChangingAvailability(false);
+        }
+    }
+
+    function handleSelectAvailableOffer(deliveryId: string) {
+        setSelectedOfferId(deliveryId);
+        setIsOffersDialogOpen(false);
+        setIsMenuCollapsed(false);
+
+        if (typeof window !== "undefined") {
+            const url = new URL(window.location.href);
+            url.searchParams.set("deliveryId", deliveryId);
+            window.history.replaceState(null, "", url.toString());
+        }
+    }
+
+    async function acceptAvailableDelivery(deliveryId: string) {
+        try {
+            setIsAcceptingOffer(true);
+            await fetchJson(
+                `/api/delivery/rider/deliveries/${deliveryId}/accept`,
+                { method: "POST" },
+            );
+            await Promise.all([refreshActiveDelivery(), refreshProfile()]);
+            setAvailableOffers((currentOffers) =>
+                currentOffers.filter((offer) => offer.deliveryId !== deliveryId),
+            );
+            setSelectedOfferId(null);
+            setIsOffersDialogOpen(false);
+            toast.success("Entrega aceita com sucesso.");
+        } catch (error) {
+            toast.error(
+                error instanceof Error
+                    ? error.message
+                    : "Nao foi possivel aceitar a corrida.",
+            );
+        } finally {
+            setIsAcceptingOffer(false);
         }
     }
 
@@ -689,19 +838,43 @@ export function RiderDashboard({
             ? Math.floor((Date.now() - onlineStartedAtRef.current) / 1000)
             : 0);
     const activeHoursLabel = `${(onlineSecondsToday / 3600).toFixed(1)}h`;
+    const selectedAvailableOffer =
+        availableOffers.find((offer) => offer.deliveryId === selectedOfferId) ??
+        availableOffers[0] ??
+        null;
+    const selectedAvailableDeliveryId =
+        selectedAvailableOffer?.deliveryId ?? selectedOfferId;
+    const selectedOfferIsDeepLinkOnly =
+        Boolean(selectedAvailableDeliveryId) && !selectedAvailableOffer;
+    const availableOffersCount =
+        availableOffers.length + (selectedOfferIsDeepLinkOnly ? 1 : 0);
+    const availableOffersSummaryLabel =
+        availableOffersCount === 1
+            ? "1 corrida disponível"
+            : `${availableOffersCount} corridas disponíveis`;
+    const mapPickupLatitude =
+        activeDelivery?.pickupLatitude ?? selectedAvailableOffer?.pickupLatitude;
+    const mapPickupLongitude =
+        activeDelivery?.pickupLongitude ??
+        selectedAvailableOffer?.pickupLongitude;
+    const mapStatus =
+        activeDelivery?.status ?? (selectedAvailableOffer ? "ASSIGNED" : null);
 
     return (
         <main className="min-h-dvh bg-slate-950 text-white md:bg-slate-900">
             <div className="relative mx-auto min-h-dvh max-w-md overflow-hidden bg-slate-950 shadow-2xl md:my-6 md:min-h-[860px]">
-                <div className="absolute inset-0">
+                <div
+                    className="absolute inset-0"
+                    onPointerDownCapture={() => setIsMenuCollapsed(true)}
+                >
                     <DeliveryMap
-                        pickupLat={activeDelivery?.pickupLatitude}
-                        pickupLng={activeDelivery?.pickupLongitude}
+                        pickupLat={mapPickupLatitude}
+                        pickupLng={mapPickupLongitude}
                         destLat={activeDelivery?.destinationLatitude}
                         destLng={activeDelivery?.destinationLongitude}
                         riderLat={riderLatitude}
                         riderLng={riderLongitude}
-                        status={activeDelivery?.status}
+                        status={mapStatus}
                         distanceKm={
                             activeDelivery?.distanceMeters
                                 ? activeDelivery.distanceMeters / 1000
@@ -772,10 +945,81 @@ export function RiderDashboard({
                     </div>
                 ) : null}
 
-                <section className="absolute inset-x-0 bottom-0 z-20 max-h-[68dvh] overflow-y-auto rounded-t-[2rem] bg-slate-950/95 px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 shadow-2xl shadow-black/40 backdrop-blur-xl">
+                {!activeDelivery && availableOffersCount > 0 ? (
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setIsOffersDialogOpen(true);
+                            setIsMenuCollapsed(false);
+                        }}
+                        className="absolute left-4 top-[calc(env(safe-area-inset-top)+5.5rem)] z-20 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-slate-950/70 px-3 py-2 text-sm font-semibold text-white shadow-lg shadow-primary/10 backdrop-blur transition-colors hover:bg-slate-950/85"
+                    >
+                        <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white">
+                            <ListChecks className="h-4 w-4" />
+                            <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-400 px-1 text-[10px] font-bold text-slate-950 ring-2 ring-slate-950">
+                                {availableOffersCount}
+                            </span>
+                        </span>
+                        Ver corridas
+                    </button>
+                ) : null}
+
+                <section
+                    onClick={() => {
+                        if (isMenuCollapsed) {
+                            setIsMenuCollapsed(false);
+                        }
+                    }}
+                    className={cn(
+                        "absolute inset-x-0 bottom-0 z-20 bg-slate-950/95 px-4 shadow-2xl shadow-black/40 backdrop-blur-xl transition-[max-height,border-radius,padding,transform] duration-300 ease-out",
+                        isMenuCollapsed
+                            ? "max-h-[132px] cursor-pointer overflow-hidden rounded-t-2xl pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3"
+                            : "max-h-[68dvh] overflow-y-auto rounded-t-[2rem] pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4",
+                    )}
+                >
                     <div className="mx-auto mb-5 h-1.5 w-14 rounded-full bg-white/20" />
 
-                    {activeDelivery ? (
+                    {isMenuCollapsed ? (
+                        <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            {activeDelivery ? (
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-sky-100 ring-1 ring-primary/25">
+                                        <Navigation2 className="h-5 w-5" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-semibold text-white">
+                                            {customerLabel}
+                                        </p>
+                                        <p className="truncate text-xs text-white/50">
+                                            {deliveryTimeLabel} · {statusLabel}
+                                        </p>
+                                    </div>
+                                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white">
+                                        Expandir
+                                    </span>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-sky-100 ring-1 ring-primary/25">
+                                        <Bike className="h-5 w-5" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-semibold text-white">
+                                            {isOnline ? "Online" : "Offline"}
+                                        </p>
+                                        <p className="truncate text-xs text-white/50">
+                                            {availableOffersCount > 0
+                                                ? availableOffersSummaryLabel
+                                                : "Aguardando nova corrida"}
+                                        </p>
+                                    </div>
+                                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white">
+                                        Expandir
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    ) : activeDelivery ? (
                         <>
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
@@ -1055,54 +1299,63 @@ export function RiderDashboard({
                                 </div>
                             </div>
 
-                            {availableOffer ? (
+                            {selectedAvailableDeliveryId ? (
                                 <div className="mt-3 rounded-lg border border-primary/25 bg-primary/10 p-4 text-left shadow-lg shadow-primary/10">
-                                    <p className="text-xs font-semibold uppercase text-sky-100">
-                                        Nova entrega disponível
-                                    </p>
-                                    <p className="mt-1 text-sm font-medium text-white">
-                                        Pedido #{availableOffer.orderId.slice(-6)}
-                                    </p>
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-semibold uppercase text-sky-100">
+                                                Corrida selecionada
+                                            </p>
+                                            <p className="mt-1 text-sm font-medium text-white">
+                                                Pedido #
+                                                {selectedAvailableOffer?.orderId.slice(
+                                                    -6,
+                                                ) ??
+                                                    selectedAvailableDeliveryId.slice(
+                                                        -6,
+                                                    )}
+                                            </p>
+                                        </div>
+                                        {availableOffersCount > 1 ? (
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                className="h-8 border-primary/25 bg-primary/15 px-2 text-xs text-white hover:bg-primary/25 hover:text-white"
+                                                onClick={() =>
+                                                    setIsOffersDialogOpen(true)
+                                                }
+                                            >
+                                                <ListChecks className="mr-1.5 h-3.5 w-3.5" />
+                                                {availableOffersCount}
+                                            </Button>
+                                        ) : null}
+                                    </div>
                                     <p className="mt-1 line-clamp-2 text-sm text-white/60">
-                                        {availableOffer.destinationAddress}
+                                        {selectedAvailableOffer?.destinationAddress ??
+                                            "Selecionada por link. Toque para aceitar se ainda estiver disponível."}
                                     </p>
-                                    {typeof availableOffer.riderPayoutCents ===
+                                    {typeof selectedAvailableOffer?.riderPayoutCents ===
                                     "number" ? (
                                         <p className="mt-2 text-sm font-semibold text-emerald-300">
                                             Repasse previsto:{" "}
                                             {formatMoney(
-                                                availableOffer.riderPayoutCents,
+                                                selectedAvailableOffer.riderPayoutCents,
                                             )}
                                         </p>
+                                    ) : null}
+                                    {selectedAvailableOffer?.isHighPriority ? (
+                                        <Badge className="mt-2 border border-amber-300/30 bg-amber-400/15 text-amber-100">
+                                            {selectedAvailableOffer.priorityLabel ||
+                                                "Alta prioridade"}
+                                        </Badge>
                                     ) : null}
                                     <Button
                                         className="mt-3 h-11 w-full bg-primary text-white hover:bg-primary/90"
                                         onClick={() =>
-                                            void (async () => {
-                                                try {
-                                                    setIsAcceptingOffer(true);
-                                                    await fetchJson(
-                                                        `/api/delivery/rider/deliveries/${availableOffer.deliveryId}/accept`,
-                                                        { method: "POST" },
-                                                    );
-                                                    await Promise.all([
-                                                        refreshActiveDelivery(),
-                                                        refreshProfile(),
-                                                    ]);
-                                                    setAvailableOffer(null);
-                                                    toast.success(
-                                                        "Entrega aceita com sucesso.",
-                                                    );
-                                                } catch (error) {
-                                                    toast.error(
-                                                        error instanceof Error
-                                                            ? error.message
-                                                            : "Nao foi possivel aceitar a corrida.",
-                                                    );
-                                                } finally {
-                                                    setIsAcceptingOffer(false);
-                                                }
-                                            })()
+                                            void acceptAvailableDelivery(
+                                                selectedAvailableDeliveryId,
+                                            )
                                         }
                                         disabled={
                                             !!runningAction || isAcceptingOffer
@@ -1141,6 +1394,139 @@ export function RiderDashboard({
                     )}
                 </section>
             </div>
+
+            <Dialog
+                open={isOffersDialogOpen}
+                onOpenChange={setIsOffersDialogOpen}
+            >
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Corridas disponíveis</DialogTitle>
+                        <DialogDescription>
+                            Escolha qual corrida deseja aceitar agora.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="max-h-[55dvh] space-y-2 overflow-y-auto pr-1">
+                        {selectedOfferIsDeepLinkOnly &&
+                        selectedAvailableDeliveryId ? (
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    handleSelectAvailableOffer(
+                                        selectedAvailableDeliveryId,
+                                    )
+                                }
+                                className="w-full rounded-lg border border-primary/30 bg-primary/10 p-3 text-left transition-colors hover:bg-primary/15"
+                            >
+                                <div className="flex items-center justify-between gap-3">
+                                    <p className="text-sm font-semibold text-slate-950">
+                                        Corrida do link
+                                    </p>
+                                    <Badge className="bg-primary text-white">
+                                        Selecionada
+                                    </Badge>
+                                </div>
+                                <p className="mt-1 text-xs text-slate-500">
+                                    ID final {selectedAvailableDeliveryId.slice(-8)}
+                                </p>
+                            </button>
+                        ) : null}
+                        {availableOffers.length > 0
+                            ? availableOffers.map((offer) => {
+                                const isSelected =
+                                    selectedAvailableDeliveryId ===
+                                    offer.deliveryId;
+
+                                return (
+                                    <button
+                                        key={offer.deliveryId}
+                                        type="button"
+                                        onClick={() =>
+                                            handleSelectAvailableOffer(
+                                                offer.deliveryId,
+                                            )
+                                        }
+                                        className={cn(
+                                            "w-full rounded-lg border p-3 text-left transition-colors",
+                                            isSelected
+                                                ? "border-primary/40 bg-primary/10"
+                                                : "border-slate-200 bg-white hover:border-primary/30 hover:bg-slate-50",
+                                        )}
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-semibold text-slate-950">
+                                                    Pedido #
+                                                    {offer.orderId.slice(-6)}
+                                                </p>
+                                                <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+                                                    {offer.destinationAddress}
+                                                </p>
+                                            </div>
+                                            <div className="shrink-0 text-right">
+                                                <p className="text-xs font-medium text-slate-500">
+                                                    {getOfferTimeLabel(offer)}
+                                                </p>
+                                                {typeof offer.riderPayoutCents ===
+                                                "number" ? (
+                                                    <p className="mt-1 text-sm font-semibold text-emerald-700">
+                                                        {formatMoney(
+                                                            offer.riderPayoutCents,
+                                                        )}
+                                                    </p>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                        <div className="mt-2 flex items-center justify-between gap-2">
+                                            {offer.isHighPriority ? (
+                                                <Badge className="border border-amber-200 bg-amber-50 text-amber-700">
+                                                    {offer.priorityLabel ||
+                                                        "Alta prioridade"}
+                                                </Badge>
+                                            ) : (
+                                                <span className="text-xs text-slate-400">
+                                                    Disponível
+                                                </span>
+                                            )}
+                                            {isSelected ? (
+                                                <Badge className="bg-primary text-white">
+                                                    Selecionada
+                                                </Badge>
+                                            ) : null}
+                                        </div>
+                                    </button>
+                                );
+                            })
+                            : null}
+                        {availableOffers.length === 0 &&
+                        !selectedOfferIsDeepLinkOnly ? (
+                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-center">
+                                <Route className="mx-auto h-8 w-8 text-slate-400" />
+                                <p className="mt-2 text-sm font-medium text-slate-700">
+                                    Nenhuma corrida na lista
+                                </p>
+                            </div>
+                        ) : null}
+                    </div>
+                    {selectedAvailableDeliveryId ? (
+                        <Button
+                            type="button"
+                            className="h-11 w-full bg-primary text-white hover:bg-primary/90"
+                            disabled={isAcceptingOffer}
+                            onClick={() =>
+                                void acceptAvailableDelivery(
+                                    selectedAvailableDeliveryId,
+                                )
+                            }
+                        >
+                            {isAcceptingOffer ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : null}
+                            Aceitar selecionada
+                        </Button>
+                    ) : null}
+                </DialogContent>
+            </Dialog>
 
             <Dialog
                 open={isNavigationDialogOpen}
