@@ -11,9 +11,11 @@ import { Button } from "@/components/ui/button";
 import { StoreDeliveryManager } from "@/features/delivery/pages/store-delivery-manager";
 import {
     listAvailableDeliveryRiders,
+    listRiderPerformance,
     listStoreDeliveries,
 } from "@/features/delivery/services/delivery-api";
 import type {
+    DeliveryRiderPerformanceMetric,
     DeliveryRider,
     StoreDelivery,
 } from "@/features/delivery/services/delivery-types";
@@ -30,16 +32,22 @@ export default async function DashboardDeliveryPage() {
 
     let deliveries: StoreDelivery[] = [];
     let availableRiders: DeliveryRider[] = [];
+    let riderPerformance: DeliveryRiderPerformanceMetric[] = [];
     let loadError: string | null = null;
 
     try {
-        const [deliveryItems, riders] = await Promise.all([
+        const [deliveryItems, riders, performance] = await Promise.all([
             listStoreDeliveries(user.id),
             listAvailableDeliveryRiders(user.id).catch(() => []),
+            listRiderPerformance(user.id, {
+                sortBy: "rating",
+                limit: 100,
+            }).catch(() => []),
         ]);
 
         deliveries = deliveryItems;
         availableRiders = riders;
+        riderPerformance = performance;
     } catch (error) {
         loadError =
             error instanceof Error
@@ -94,6 +102,7 @@ export default async function DashboardDeliveryPage() {
                 userId={user.id}
                 initialDeliveries={deliveries}
                 initialAvailableRiders={availableRiders}
+                initialRiderPerformance={riderPerformance}
             />
         </div>
     );

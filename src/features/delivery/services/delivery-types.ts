@@ -108,6 +108,32 @@ export type DeliveryPayoutSummary = {
     updatedAt: string;
 };
 
+export type DeliveryRatingSummary = {
+    id: string;
+    deliveryId: string;
+    riderId: string;
+    ownerUserId: string;
+    customerWhatsappId: string | null;
+    score: number;
+    comment: string | null;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type DeliveryRiderPerformanceMetric = {
+    riderId: string;
+    userId: string;
+    displayName: string | null;
+    vehicleType: string;
+    vehiclePlate: string | null;
+    isStoreOwned: boolean;
+    averageDeliverySeconds: number | null;
+    averageDeliveryMinutes: number | null;
+    deliveredOrdersLast30Days: number;
+    averageRating: number | null;
+    ratingCount: number;
+};
+
 export type DeliveryOwnerSummary = {
     id: string;
     name: string | null;
@@ -180,6 +206,7 @@ export type StoreDelivery = {
     ownerUser?: DeliveryOwnerSummary | null;
     rider: DeliveryRider | null;
     payout: DeliveryPayoutSummary | null;
+    rating?: DeliveryRatingSummary | null;
     order: DeliveryOrderSummary;
 };
 
@@ -229,7 +256,7 @@ export type RiderNewAvailableDeliveryEvent = {
     riderUserIds?: string[];
     pickupLatitude?: number | null;
     pickupLongitude?: number | null;
-    destinationAddress: string;
+    destinationAddress?: string;
     quotedPriceCents?: number;
     riderPayoutCents?: number;
     bonusValueCents?: number;

@@ -61,27 +61,28 @@ model User {
   createdAt                    DateTime         @default(now())
   updatedAt                    DateTime         @updatedAt
 
-  bots                BotAccount[]
-  products            Product[]
-  templates           MessageTemplate[]
-  subscription        Subscription?
-  transactions        Transaction[]
-  whatsappInstances   WhatsappInstance[]
-  whatsappCustomers   WhatsappCustomer[]
-  orders              Order[]                      @relation("UserOrders")
-  storeAddressDetails StoreAddress?
-  whatsappHandovers   WhatsappHandover[]
-  operatingHours      OperatingHour[]              @relation("SubscriberOperatingHours")
-  tags                Tag[]                        @relation("SubscriberTags")
-  productTags         ProductTags[]                @relation("SubscriberProductTags")
-  riderProfile        Rider?                       @relation("RiderUser")
-  storeRiders         Rider[]                      @relation("StoreOwnedRiders")
-  storeDeliveries     Delivery[]                   @relation("StoreDeliveries")
-  deliveryPayouts     DeliveryPayout[]             @relation("StoreDeliveryPayouts")
-  safetyFundCoverages DeliverySafetyFundCoverage[] @relation("StoreSafetyFundCoverages")
-  pushSubscriptions   PushSubscription[]
-  wallet              Wallet?
-  walletTransactions  WalletTransaction[]
+  bots                 BotAccount[]
+  products             Product[]
+  templates            MessageTemplate[]
+  subscription         Subscription?
+  transactions         Transaction[]
+  whatsappInstances    WhatsappInstance[]
+  whatsappCustomers    WhatsappCustomer[]
+  orders               Order[]                      @relation("UserOrders")
+  storeAddressDetails  StoreAddress?
+  whatsappHandovers    WhatsappHandover[]
+  operatingHours       OperatingHour[]              @relation("SubscriberOperatingHours")
+  tags                 Tag[]                        @relation("SubscriberTags")
+  productTags          ProductTags[]                @relation("SubscriberProductTags")
+  riderProfile         Rider?                       @relation("RiderUser")
+  storeRiders          Rider[]                      @relation("StoreOwnedRiders")
+  storeDeliveries      Delivery[]                   @relation("StoreDeliveries")
+  deliveryPayouts      DeliveryPayout[]             @relation("StoreDeliveryPayouts")
+  safetyFundCoverages  DeliverySafetyFundCoverage[] @relation("StoreSafetyFundCoverages")
+  pushSubscriptions    PushSubscription[]
+  wallet               Wallet?
+  walletTransactions   WalletTransaction[]
+  storeDeliveryRatings DeliveryRating[]             @relation("StoreDeliveryRatings")
 }
 
 model StoreAddress {
@@ -697,6 +698,7 @@ model Rider {
   incidents  DeliveryIncident[]
   payouts    DeliveryPayout[]
   events     DeliveryEvent[]
+  ratings    DeliveryRating[]
 
   @@index([ownerUserId, status])
   @@index([availabilityStatus, status])
@@ -749,6 +751,7 @@ model Delivery {
   events             DeliveryEvent[]
   payout             DeliveryPayout?
   safetyFundCoverage DeliverySafetyFundCoverage?
+  rating             DeliveryRating?
 
   @@index([ownerUserId, status, createdAt])
   @@index([riderId, status])
@@ -756,6 +759,26 @@ model Delivery {
   @@index([status, isHighPriority, updatedAt])
   @@index([status, createdAt])
   @@index([status, updatedAt])
+}
+
+model DeliveryRating {
+  id                 String   @id @default(cuid())
+  deliveryId         String   @unique
+  riderId            String
+  ownerUserId        String
+  customerWhatsappId String?
+  score              Int
+  comment            String?  @db.Text
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  delivery  Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  rider     Rider    @relation(fields: [riderId], references: [id], onDelete: Cascade)
+  ownerUser User     @relation("StoreDeliveryRatings", fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@index([riderId, createdAt])
+  @@index([ownerUserId, createdAt])
+  @@index([score])
 }
 
 model DeliveryIncident {

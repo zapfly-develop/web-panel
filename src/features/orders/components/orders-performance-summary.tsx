@@ -55,12 +55,12 @@ export function OrdersPerformanceSummary({
                         key={card.label}
                         className="rounded-md border border-slate-200 bg-white p-4 shadow-sm"
                     >
-                        <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
+                        <div className="flex min-w-0 items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
                                 <p className="text-xs font-medium uppercase text-slate-500">
                                     {card.label}
                                 </p>
-                                <p className="mt-1 text-2xl font-bold text-slate-950">
+                                <p className="mt-1 break-words text-xl font-bold leading-tight text-slate-950 sm:text-2xl">
                                     {card.value}
                                 </p>
                                 <p className="mt-1 text-xs text-slate-500">
@@ -68,7 +68,7 @@ export function OrdersPerformanceSummary({
                                 </p>
                             </div>
                             <div
-                                className={`rounded-md border p-2 ${card.className}`}
+                                className={`shrink-0 rounded-md border p-2 ${card.className}`}
                             >
                                 <Icon className="h-4 w-4" />
                             </div>

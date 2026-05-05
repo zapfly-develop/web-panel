@@ -1,14 +1,23 @@
 import { fetchNestApiJson } from "@/lib/nest-api";
 import type {
+    DeliveryRiderPerformanceMetric,
     DeliveryRider,
     DeliveryStatus,
     DeliveryStatusFilter,
     RiderAvailabilityStatus,
     RiderLocationPayload,
+    RiderNewAvailableDeliveryEvent,
     StoreAddress,
     StoreAddressPayload,
     StoreDelivery,
 } from "./delivery-types";
+
+export type RiderPerformanceSortBy = "fastest" | "rating" | "deliveries";
+
+export type RiderPerformanceQuery = {
+    sortBy?: RiderPerformanceSortBy;
+    limit?: number;
+};
 
 function buildTenantHeaders(userId: string): HeadersInit {
     return {
@@ -106,6 +115,30 @@ export async function listAvailableDeliveryRiders(
     });
 }
 
+export async function listRiderPerformance(
+    userId: string,
+    query: RiderPerformanceQuery = {},
+): Promise<DeliveryRiderPerformanceMetric[]> {
+    const searchParams = new URLSearchParams();
+
+    if (query.sortBy) {
+        searchParams.set("sortBy", query.sortBy);
+    }
+
+    if (typeof query.limit === "number") {
+        searchParams.set("limit", String(query.limit));
+    }
+
+    const queryString = searchParams.toString();
+
+    return fetchNestApiJson<DeliveryRiderPerformanceMetric[]>(
+        `/delivery/riders/performance${queryString ? `?${queryString}` : ""}`,
+        {
+            headers: buildTenantHeaders(userId),
+        },
+    );
+}
+
 export async function updateStoreAddress(
     userId: string,
     payload: StoreAddressPayload,
@@ -142,6 +175,17 @@ export async function getMyActiveDelivery(
 ): Promise<StoreDelivery | null> {
     return fetchNestApiJson<StoreDelivery | null>(
         "/delivery/riders/me/active-delivery",
+        {
+            headers: buildTenantHeaders(userId),
+        },
+    );
+}
+
+export async function listMyAvailableDeliveries(
+    userId: string,
+): Promise<RiderNewAvailableDeliveryEvent[]> {
+    return fetchNestApiJson<RiderNewAvailableDeliveryEvent[]>(
+        "/delivery/riders/me/available-deliveries",
         {
             headers: buildTenantHeaders(userId),
         },

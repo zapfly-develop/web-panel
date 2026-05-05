@@ -6,6 +6,7 @@ import { getAccessSummary } from "@/lib/saas/access";
 const ADMIN_HOME = "/admin/dashboard";
 const STORE_HOME = "/dashboard";
 const RIDER_HOME = "/delivery/rider";
+const RIDER_REGISTER = "/delivery/rider/register";
 const BILLING_HOME = "/billing";
 
 function matchesPath(pathname: string, path: string) {
@@ -37,10 +38,15 @@ export default auth(async (req) => {
     const isDashboardRoute = matchesPath(pathname, "/dashboard");
     const isBillingRoute = matchesPath(pathname, "/billing");
     const isRiderRoute = matchesPath(pathname, RIDER_HOME);
+    const isRiderRegisterRoute = matchesPath(pathname, RIDER_REGISTER);
     const isDashboardApiRoute = matchesPath(pathname, "/api/dashboard");
     const isRiderApiRoute = matchesPath(pathname, "/api/delivery/rider");
 
     if (!isLoggedIn) {
+        if (isRiderRegisterRoute) {
+            return NextResponse.next();
+        }
+
         if (isApiRoute) {
             return NextResponse.json(
                 { error: "Sessao obrigatoria." },
@@ -84,6 +90,15 @@ export default auth(async (req) => {
     const isSuperAdmin = access.isSuperAdmin;
     const isRider = Boolean(dbUser.riderProfile);
     const hasActiveAccess = access.hasActiveAccess;
+
+    if (isRiderRegisterRoute) {
+        return NextResponse.redirect(
+            new URL(
+                getSignedInHomePath({ isSuperAdmin, isRider }),
+                req.nextUrl,
+            ),
+        );
+    }
 
     if (isDashboardApiRoute) {
         if (isSuperAdmin || isRider) {

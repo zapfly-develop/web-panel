@@ -1,5 +1,15 @@
 import { fetchNestApiJson } from "@/lib/nest-api";
-import type { OrderStatus, StoreOrder } from "./order-types";
+import type {
+    OrderHeatmapPoint,
+    OrderStatus,
+    StoreOrder,
+} from "./order-types";
+
+export type OrderHeatmapQuery = {
+    from?: string;
+    to?: string;
+    gridSizeMeters?: number;
+};
 
 function buildTenantHeaders(userId: string): HeadersInit {
     return {
@@ -16,6 +26,34 @@ export async function listStoreOrders(userId: string): Promise<StoreOrder[]> {
     );
 
     return payload.orders;
+}
+
+export async function listStoreOrderHeatmap(
+    userId: string,
+    query: OrderHeatmapQuery = {},
+): Promise<OrderHeatmapPoint[]> {
+    const searchParams = new URLSearchParams();
+
+    if (query.from) {
+        searchParams.set("from", query.from);
+    }
+
+    if (query.to) {
+        searchParams.set("to", query.to);
+    }
+
+    if (typeof query.gridSizeMeters === "number") {
+        searchParams.set("gridSizeMeters", String(query.gridSizeMeters));
+    }
+
+    const queryString = searchParams.toString();
+
+    return fetchNestApiJson<OrderHeatmapPoint[]>(
+        `/delivery/orders/heatmap${queryString ? `?${queryString}` : ""}`,
+        {
+            headers: buildTenantHeaders(userId),
+        },
+    );
 }
 
 export async function sendDeliveryOrderToDelivery(

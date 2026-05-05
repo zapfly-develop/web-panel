@@ -1,4 +1,5 @@
 import { Bot, CheckCircle2, MessageCircle, ShoppingBag, Sparkles } from "lucide-react";
+import Link from "next/link";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import {
@@ -117,6 +118,15 @@ export default async function RegisterPage() {
                         </CardDescription>
                     </CardHeader>
                     <RegisterForm />
+                    <div className="border-t border-slate-100 px-6 pt-4 text-center text-sm text-slate-500">
+                        Vai operar como entregador?{" "}
+                        <Link
+                            href="/delivery/rider/register"
+                            className="font-medium text-primary underline-offset-4 hover:underline"
+                        >
+                            Abrir cadastro de rider
+                        </Link>
+                    </div>
                 </Card>
             </div>
         </div>

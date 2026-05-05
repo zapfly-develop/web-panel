@@ -112,6 +112,15 @@ export function LoginForm() {
                             Criar cadastro
                         </Link>
                     </p>
+                    <p className="text-center text-sm text-slate-500">
+                        Quer entregar pela Floovi?{" "}
+                        <Link
+                            href="/delivery/rider/register"
+                            className="font-medium text-primary underline-offset-4 hover:underline"
+                        >
+                            Cadastro de entregador
+                        </Link>
+                    </p>
                 </div>
             </CardFooter>
         </form>

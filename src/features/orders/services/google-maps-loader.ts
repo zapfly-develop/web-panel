@@ -2,11 +2,13 @@ export type GoogleMapsLatLngLiteral = google.maps.LatLngLiteral;
 export type GoogleMapsMap = google.maps.Map;
 export type GoogleMapsLatLngBounds = google.maps.LatLngBounds;
 export type GoogleMapsMarker = google.maps.Marker;
+export type GoogleMapsCircle = google.maps.Circle;
 
 export type GoogleMapsGlobal = {
     maps: {
         Map: typeof google.maps.Map;
         Marker: typeof google.maps.Marker;
+        Circle: typeof google.maps.Circle;
         LatLngBounds: typeof google.maps.LatLngBounds;
         Point: typeof google.maps.Point;
         Size: typeof google.maps.Size;

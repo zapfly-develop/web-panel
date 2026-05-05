@@ -9,6 +9,7 @@ import {
     Radio,
     RefreshCw,
     Search,
+    Star,
     Timer,
     WifiOff,
 } from "lucide-react";
@@ -16,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type {
+    DeliveryRiderPerformanceMetric,
     DeliveryRider,
     DeliveryStatusFilter,
     StoreDelivery,
@@ -30,6 +32,7 @@ type StoreDeliveryManagerProps = {
     userId: string;
     initialDeliveries: StoreDelivery[];
     initialAvailableRiders: DeliveryRider[];
+    initialRiderPerformance: DeliveryRiderPerformanceMetric[];
 };
 
 type FilterOption = {
@@ -84,6 +87,8 @@ function deliveryMatchesQuery(delivery: StoreDelivery, query: string) {
         delivery.order.deliveryAddress,
         delivery.rider?.displayName,
         delivery.rider?.vehiclePlate,
+        delivery.rating?.score ? String(delivery.rating.score) : null,
+        delivery.rating?.comment,
     ]
         .filter(Boolean)
         .join(" ")
@@ -92,7 +97,27 @@ function deliveryMatchesQuery(delivery: StoreDelivery, query: string) {
     return searchable.includes(normalizedQuery);
 }
 
-function buildMetrics(deliveries: StoreDelivery[]) {
+function buildMetrics(
+    deliveries: StoreDelivery[],
+    riderPerformance: DeliveryRiderPerformanceMetric[],
+) {
+    const ratingTotals = riderPerformance.reduce(
+        (totals, metric) => {
+            if (
+                typeof metric.averageRating !== "number" ||
+                metric.ratingCount <= 0
+            ) {
+                return totals;
+            }
+
+            return {
+                score: totals.score + metric.averageRating * metric.ratingCount,
+                count: totals.count + metric.ratingCount,
+            };
+        },
+        { score: 0, count: 0 },
+    );
+
     return {
         waiting: deliveries.filter((delivery) =>
             matchesStatusFilter(delivery, "WAITING_RIDER"),
@@ -105,6 +130,11 @@ function buildMetrics(deliveries: StoreDelivery[]) {
             .length,
         delivered: deliveries.filter((delivery) => delivery.status === "DELIVERED")
             .length,
+        averageRating:
+            ratingTotals.count > 0
+                ? ratingTotals.score / ratingTotals.count
+                : null,
+        ratingCount: ratingTotals.count,
     };
 }
 
@@ -112,10 +142,14 @@ export function StoreDeliveryManager({
     userId,
     initialDeliveries,
     initialAvailableRiders,
+    initialRiderPerformance,
 }: StoreDeliveryManagerProps) {
     const [deliveries, setDeliveries] = useState(initialDeliveries);
     const [availableRiders, setAvailableRiders] = useState(
         initialAvailableRiders,
+    );
+    const [riderPerformance, setRiderPerformance] = useState(
+        initialRiderPerformance,
     );
     const [statusFilter, setStatusFilter] =
         useState<DeliveryStatusFilter>("ALL");
@@ -133,26 +167,42 @@ export function StoreDeliveryManager({
         setAvailableRiders(initialAvailableRiders);
     }, [initialAvailableRiders]);
 
+    useEffect(() => {
+        setRiderPerformance(initialRiderPerformance);
+    }, [initialRiderPerformance]);
+
     const refreshDeliveries = useCallback(async () => {
         try {
             setIsRefreshing(true);
 
-            const [deliveriesResponse, ridersResponse] = await Promise.all([
-                fetch("/api/dashboard/delivery/deliveries", {
-                    headers: {
-                        Accept: "application/json",
-                    },
-                }),
-                fetch("/api/dashboard/delivery/riders/available", {
-                    headers: {
-                        Accept: "application/json",
-                    },
-                }),
-            ]);
+            const [deliveriesResponse, ridersResponse, performanceResponse] =
+                await Promise.all([
+                    fetch("/api/dashboard/delivery/deliveries", {
+                        headers: {
+                            Accept: "application/json",
+                        },
+                    }),
+                    fetch("/api/dashboard/delivery/riders/available", {
+                        headers: {
+                            Accept: "application/json",
+                        },
+                    }),
+                    fetch(
+                        "/api/dashboard/delivery/riders/performance?sortBy=rating&limit=100",
+                        {
+                            headers: {
+                                Accept: "application/json",
+                            },
+                        },
+                    ),
+                ]);
             const deliveriesPayload = await deliveriesResponse
                 .json()
                 .catch(() => null);
             const ridersPayload = await ridersResponse.json().catch(() => null);
+            const performancePayload = await performanceResponse
+                .json()
+                .catch(() => null);
 
             if (!deliveriesResponse.ok) {
                 throw new Error(
@@ -170,10 +220,21 @@ export function StoreDeliveryManager({
                 );
             }
 
+            if (!performanceResponse.ok) {
+                throw new Error(
+                    performancePayload?.error ||
+                        performancePayload?.message ||
+                        "Nao foi possivel atualizar performance dos riders.",
+                );
+            }
+
             setDeliveries(
                 Array.isArray(deliveriesPayload) ? deliveriesPayload : [],
             );
             setAvailableRiders(Array.isArray(ridersPayload) ? ridersPayload : []);
+            setRiderPerformance(
+                Array.isArray(performancePayload) ? performancePayload : [],
+            );
             setLastSyncAt(new Date().toISOString());
         } finally {
             setIsRefreshing(false);
@@ -196,7 +257,17 @@ export function StoreDeliveryManager({
         return () => window.clearInterval(interval);
     }, [realtime.isConnected, refreshDeliveries]);
 
-    const metrics = useMemo(() => buildMetrics(deliveries), [deliveries]);
+    const metrics = useMemo(
+        () => buildMetrics(deliveries, riderPerformance),
+        [deliveries, riderPerformance],
+    );
+    const riderPerformanceById = useMemo(
+        () =>
+            new Map(
+                riderPerformance.map((metric) => [metric.riderId, metric]),
+            ),
+        [riderPerformance],
+    );
     const riderMarkers = useMemo(
         () => buildRiderMarkers(deliveries, availableRiders),
         [availableRiders, deliveries],
@@ -237,7 +308,7 @@ export function StoreDeliveryManager({
     return (
         <div className="space-y-5">
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
                     <div className="rounded-md border border-amber-100 bg-amber-50 p-4">
                         <div className="flex items-center justify-between gap-3">
                             <p className="text-sm font-medium text-amber-700">
@@ -295,6 +366,25 @@ export function StoreDeliveryManager({
                         </div>
                         <p className="mt-2 text-2xl font-bold text-emerald-900">
                             {metrics.delivered}
+                        </p>
+                    </div>
+
+                    <div className="rounded-md border border-rose-100 bg-rose-50 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-medium text-rose-700">
+                                Nota media
+                            </p>
+                            <Star className="h-4 w-4 text-rose-600" />
+                        </div>
+                        <p className="mt-2 text-2xl font-bold text-rose-900">
+                            {metrics.averageRating === null
+                                ? "--"
+                                : metrics.averageRating.toFixed(1)}
+                        </p>
+                        <p className="mt-1 text-xs text-rose-700">
+                            {metrics.ratingCount === 1
+                                ? "1 avaliacao"
+                                : `${metrics.ratingCount} avaliacoes`}
                         </p>
                     </div>
                 </div>
@@ -382,6 +472,7 @@ export function StoreDeliveryManager({
 
             <DeliveryList
                 deliveries={filteredDeliveries}
+                riderPerformanceById={riderPerformanceById}
                 onAssignClick={setSelectedDelivery}
             />
 

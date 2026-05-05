@@ -55,6 +55,12 @@ export type StoreOrder = {
     items: StoreOrderItem[];
 };
 
+export type OrderHeatmapPoint = {
+    lat: number;
+    lng: number;
+    weight: number;
+};
+
 export type DeliveryOrderItem = StoreOrderItem;
 export type DeliveryOrderCard = StoreOrder;
 

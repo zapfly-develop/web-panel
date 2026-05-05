@@ -11,6 +11,7 @@ import type {
 } from "@/features/delivery/services/delivery-types";
 import { useDeliveryRealtime } from "@/features/delivery/hooks/use-delivery-realtime";
 import type {
+    OrderHeatmapPoint,
     OrderPaymentFilter,
     OrderStatus,
     OrderStatusFilter,
@@ -32,6 +33,7 @@ import { OrderDetailsDialog } from "../components/order-details-dialog";
 import { OrdersCardView } from "../components/orders-card-view";
 import { OrdersFilterBar } from "../components/orders-filter-bar";
 import { OrdersKanbanBoard } from "../components/orders-kanban-board";
+import { OrderHeatmapMap } from "../components/order-heatmap-map";
 import { OrdersPerformanceSummary } from "../components/orders-performance-summary";
 import { OrdersTableView } from "../components/orders-table-view";
 import { RiderOperationsMap } from "../components/rider-operations-map";
@@ -43,6 +45,7 @@ type StoreOrdersWorkspaceProps = {
     initialOrders: StoreOrder[];
     initialDeliveries: StoreDelivery[];
     initialAvailableRiders: DeliveryRider[];
+    initialHeatmapPoints: OrderHeatmapPoint[];
 };
 
 export function StoreOrdersWorkspace({
@@ -50,12 +53,14 @@ export function StoreOrdersWorkspace({
     initialOrders,
     initialDeliveries,
     initialAvailableRiders,
+    initialHeatmapPoints,
 }: StoreOrdersWorkspaceProps) {
     const [orders, setOrders] = useState(() => sortOrders(initialOrders));
     const [deliveries, setDeliveries] = useState(initialDeliveries);
     const [availableRiders, setAvailableRiders] = useState(
         initialAvailableRiders,
     );
+    const [heatmapPoints, setHeatmapPoints] = useState(initialHeatmapPoints);
     const [query, setQuery] = useState("");
     const [statusFilter, setStatusFilter] =
         useState<OrderStatusFilter>("ALL");
@@ -143,10 +148,36 @@ export function StoreOrdersWorkspace({
         setAvailableRiders(Array.isArray(ridersPayload) ? ridersPayload : []);
     }, []);
 
+    const refreshHeatmap = useCallback(async () => {
+        const response = await fetch(
+            "/api/dashboard/orders/heatmap?gridSizeMeters=250",
+            {
+                headers: {
+                    Accept: "application/json",
+                },
+            },
+        );
+        const payload = await response.json().catch(() => null);
+
+        if (!response.ok) {
+            throw new Error(
+                payload?.error ||
+                    payload?.message ||
+                    "Nao foi possivel atualizar o mapa de calor.",
+            );
+        }
+
+        setHeatmapPoints(Array.isArray(payload) ? payload : []);
+    }, []);
+
     const refreshAll = useCallback(async () => {
         try {
             setIsRefreshing(true);
-            await Promise.all([refreshOrders(), refreshLogistics()]);
+            await Promise.all([
+                refreshOrders(),
+                refreshLogistics(),
+                refreshHeatmap(),
+            ]);
         } catch (error) {
             toast.error(
                 error instanceof Error
@@ -156,7 +187,7 @@ export function StoreOrdersWorkspace({
         } finally {
             setIsRefreshing(false);
         }
-    }, [refreshLogistics, refreshOrders]);
+    }, [refreshHeatmap, refreshLogistics, refreshOrders]);
 
     const ordersRealtime = useOrdersRealtime({
         userId,
@@ -403,9 +434,11 @@ export function StoreOrdersWorkspace({
 
     return (
         <div className="space-y-5">
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(340px,0.8fr)]">
-                <OrdersPerformanceSummary metrics={metrics} />
+            <OrdersPerformanceSummary metrics={metrics} />
+
+            <div className="grid gap-4 xl:grid-cols-2">
                 <RiderOperationsMap markers={riderMarkers} />
+                <OrderHeatmapMap points={heatmapPoints} />
             </div>
 
             <OrdersFilterBar

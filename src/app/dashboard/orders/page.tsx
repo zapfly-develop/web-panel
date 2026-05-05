@@ -13,8 +13,14 @@ import type {
     StoreDelivery,
 } from "@/features/delivery/services/delivery-types";
 import { StoreOrdersWorkspace } from "@/features/orders/pages/store-orders-workspace";
-import { listStoreOrders } from "@/features/orders/services/orders-api";
-import type { StoreOrder } from "@/features/orders/services/order-types";
+import {
+    listStoreOrderHeatmap,
+    listStoreOrders,
+} from "@/features/orders/services/orders-api";
+import type {
+    OrderHeatmapPoint,
+    StoreOrder,
+} from "@/features/orders/services/order-types";
 import { requireSessionUser } from "@/lib/server-session";
 
 export const runtime = "nodejs";
@@ -29,18 +35,23 @@ export default async function DashboardOrdersPage() {
     let orders: StoreOrder[] = [];
     let deliveries: StoreDelivery[] = [];
     let availableRiders: DeliveryRider[] = [];
+    let heatmapPoints: OrderHeatmapPoint[] = [];
     let loadError: string | null = null;
 
     try {
-        const [dashboardOrders, deliveryItems, riders] = await Promise.all([
+        const [dashboardOrders, deliveryItems, riders, heatmap] = await Promise.all([
             listStoreOrders(user.id),
             listStoreDeliveries(user.id).catch(() => []),
             listAvailableDeliveryRiders(user.id).catch(() => []),
+            listStoreOrderHeatmap(user.id, { gridSizeMeters: 250 }).catch(
+                () => [],
+            ),
         ]);
 
         orders = dashboardOrders;
         deliveries = deliveryItems;
         availableRiders = riders;
+        heatmapPoints = heatmap;
     } catch (error) {
         loadError =
             error instanceof Error
@@ -100,6 +111,7 @@ export default async function DashboardOrdersPage() {
                 initialOrders={orders}
                 initialDeliveries={deliveries}
                 initialAvailableRiders={availableRiders}
+                initialHeatmapPoints={heatmapPoints}
                 userId={user.id}
             />
         </div>

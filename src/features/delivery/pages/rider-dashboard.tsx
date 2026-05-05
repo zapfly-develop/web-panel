@@ -145,6 +145,16 @@ function upsertAvailableOffer(
     );
 }
 
+function mergeAvailableOffers(
+    offers: RiderNewAvailableDeliveryEvent[],
+    nextOffers: RiderNewAvailableDeliveryEvent[],
+) {
+    return nextOffers.reduce(
+        (currentOffers, offer) => upsertAvailableOffer(currentOffers, offer),
+        offers,
+    );
+}
+
 function getOfferTimeLabel(offer: RiderNewAvailableDeliveryEvent) {
     const timestamp = Date.parse(offer.timestamp);
 
@@ -283,14 +293,43 @@ export function RiderDashboard({
         return nextDelivery;
     }, []);
 
+    const refreshAvailableDeliveries = useCallback(async () => {
+        const nextOffers = await fetchJson<RiderNewAvailableDeliveryEvent[]>(
+            "/api/delivery/rider/available-deliveries",
+        );
+        const freshOffers = Array.isArray(nextOffers)
+            ? nextOffers.filter(isFreshAvailableOffer)
+            : [];
+
+        setAvailableOffers((currentOffers) =>
+            mergeAvailableOffers(currentOffers, freshOffers),
+        );
+        setSelectedOfferId(
+            (currentId) => currentId ?? freshOffers[0]?.deliveryId ?? null,
+        );
+
+        return freshOffers;
+    }, []);
+
     const refreshRiderState = useCallback(async () => {
         try {
             setIsRefreshing(true);
-            await Promise.all([refreshProfile(), refreshActiveDelivery()]);
+            const [nextProfile, nextDelivery] = await Promise.all([
+                refreshProfile(),
+                refreshActiveDelivery(),
+            ]);
+
+            if (
+                nextProfile.status === "ACTIVE" &&
+                nextProfile.availabilityStatus === "AVAILABLE" &&
+                !nextDelivery
+            ) {
+                await refreshAvailableDeliveries();
+            }
         } finally {
             setIsRefreshing(false);
         }
-    }, [refreshActiveDelivery, refreshProfile]);
+    }, [refreshActiveDelivery, refreshAvailableDeliveries, refreshProfile]);
 
     const handleDeliveryStatusChanged = useCallback(
         (event: DeliveryStatusChangedEvent) => {
@@ -511,6 +550,29 @@ export function RiderDashboard({
         enabled: Boolean(isOnline && isActiveRider),
         deliveryId: activeDeliveryId,
     });
+
+    useEffect(() => {
+        if (
+            !isActiveRider ||
+            profile?.availabilityStatus !== "AVAILABLE" ||
+            activeDelivery
+        ) {
+            return;
+        }
+
+        void refreshAvailableDeliveries().catch((error) => {
+            console.warn(
+                "Nao foi possivel carregar corridas disponiveis.",
+                error,
+            );
+        });
+    }, [
+        activeDelivery,
+        isActiveRider,
+        location.lastLocation?.sentAt,
+        profile?.availabilityStatus,
+        refreshAvailableDeliveries,
+    ]);
 
     useEffect(() => {
         if (activeDelivery) {
