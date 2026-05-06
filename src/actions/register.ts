@@ -137,9 +137,16 @@ export async function actionRegister(
                     email: data.email,
                     phone: data.phone,
                     password: passwordHash,
-                    role: UserRole.CUSTOMER,
+                    role: UserRole.MERCHANT,
                     accessStatus: UserAccessStatus.ACTIVE,
                     termsAcceptedAt: new Date(),
+                },
+            });
+
+            await tx.merchant.create({
+                data: {
+                    userId: user.id,
+                    storeName: data.name,
                 },
             });
 

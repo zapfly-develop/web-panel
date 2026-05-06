@@ -9,6 +9,9 @@ datasource db {
 enum UserRole {
   SUPER_ADMIN
   CUSTOMER
+  MERCHANT
+  RIDER
+  ADMIN
 }
 
 enum UserAccessStatus {
@@ -74,6 +77,7 @@ model User {
   operatingHours       OperatingHour[]              @relation("SubscriberOperatingHours")
   tags                 Tag[]                        @relation("SubscriberTags")
   productTags          ProductTags[]                @relation("SubscriberProductTags")
+  merchantProfile      Merchant?                    @relation("MerchantUser")
   riderProfile         Rider?                       @relation("RiderUser")
   storeRiders          Rider[]                      @relation("StoreOwnedRiders")
   storeDeliveries      Delivery[]                   @relation("StoreDeliveries")
@@ -83,6 +87,49 @@ model User {
   wallet               Wallet?
   walletTransactions   WalletTransaction[]
   storeDeliveryRatings DeliveryRating[]             @relation("StoreDeliveryRatings")
+  refreshTokens        RefreshToken[]
+}
+
+model Merchant {
+  id                           String          @id @default(cuid())
+  userId                       String          @unique
+  storeName                    String
+  assistantName                String?
+  businessProfile              BusinessProfile @default(GROCERY)
+  closedMessage                String?         @db.Text
+  manualStoreClosed            Boolean         @default(false)
+  deliveryFeeCents             Int             @default(0)
+  dynamicFareBonusCents        Int             @default(200)
+  stagnatedTimeoutMinutes      Int             @default(15)
+  riderIncidentCooldownMinutes Int             @default(30)
+  storeAddress                 String?         @db.Text
+  acceptedPaymentMethods       PaymentMethod[] @default([])
+  availableDeliveryTypes       DeliveryType[]  @default([DELIVERY])
+  createdAt                    DateTime        @default(now())
+  updatedAt                    DateTime        @updatedAt
+
+  user User @relation("MerchantUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([storeName])
+  @@index([businessProfile])
+}
+
+model RefreshToken {
+  id                  String    @id @default(cuid())
+  userId              String
+  tokenHash           String    @unique
+  expiresAt           DateTime
+  revokedAt           DateTime?
+  replacedByTokenHash String?
+  ipAddress           String?
+  userAgent           String?   @db.Text
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([revokedAt, expiresAt])
 }
 
 model StoreAddress {

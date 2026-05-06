@@ -2,7 +2,7 @@
 
 import { signIn } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { UserRole } from "@prisma/client";
+import { isAdminRole, isRiderRole } from "@/lib/saas/access";
 import { AuthError } from "next-auth";
 import { z } from "zod";
 
@@ -75,9 +75,9 @@ export async function actionLogin(
             },
         });
         const redirectTo =
-            user?.role === UserRole.SUPER_ADMIN
+            user && isAdminRole(user.role)
                 ? "/admin/dashboard"
-                : user?.riderProfile
+                : user && (isRiderRole(user.role) || user.riderProfile)
                   ? "/delivery/rider"
                   : "/dashboard";
 

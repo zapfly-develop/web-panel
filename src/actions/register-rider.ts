@@ -221,7 +221,7 @@ export async function actionRegisterRider(
                     email: data.email,
                     phone: data.phone,
                     password: passwordHash,
-                    role: UserRole.CUSTOMER,
+                    role: UserRole.RIDER,
                     accessStatus: UserAccessStatus.ACTIVE,
                     termsAcceptedAt: new Date(),
                 },

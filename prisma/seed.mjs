@@ -76,6 +76,21 @@ async function upsertUser(input) {
         });
     }
 
+    if (input.role === UserRole.MERCHANT || input.merchantProfile) {
+        const storeName = input.merchantProfile?.storeName ?? input.name;
+
+        await prisma.merchant.upsert({
+            where: { userId: user.id },
+            update: {
+                storeName,
+            },
+            create: {
+                userId: user.id,
+                storeName,
+            },
+        });
+    }
+
     return user;
 }
 
@@ -91,7 +106,10 @@ async function seedUsers() {
         email: "free@coinrise.local",
         password: "free123",
         name: "Cliente Free",
-        role: UserRole.CUSTOMER,
+        role: UserRole.MERCHANT,
+        merchantProfile: {
+            storeName: "Loja Free",
+        },
         planType: PlanType.FREE,
         planPriceCents: 0,
     });
@@ -100,7 +118,10 @@ async function seedUsers() {
         email: "pro@coinrise.local",
         password: "pro123",
         name: "Cliente Pro",
-        role: UserRole.CUSTOMER,
+        role: UserRole.MERCHANT,
+        merchantProfile: {
+            storeName: "Floovi Guaimbe",
+        },
         planType: PlanType.PRO,
         planPriceCents: Number(process.env.SAAS_PRO_PRICE_CENTS ?? 9900),
     });
@@ -139,7 +160,7 @@ async function seedMarketplaceRiders() {
             email: riderSeed.email,
             password: riderSeed.password,
             name: riderSeed.name,
-            role: UserRole.CUSTOMER,
+            role: UserRole.RIDER,
         });
 
         const rider = await prisma.rider.upsert({

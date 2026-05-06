@@ -6,6 +6,18 @@ import {
 } from "@prisma/client";
 import { getPlanDefinition } from "./plans";
 
+export function isAdminRole(role: UserRole): boolean {
+    return role === UserRole.SUPER_ADMIN || role === UserRole.ADMIN;
+}
+
+export function isRiderRole(role: UserRole): boolean {
+    return role === UserRole.RIDER;
+}
+
+export function isMerchantRole(role: UserRole): boolean {
+    return role === UserRole.MERCHANT || role === UserRole.CUSTOMER;
+}
+
 export function normalizeAiMessageLimitOverride(
     value?: number | null,
 ): number | null {
@@ -37,7 +49,7 @@ export function hasActiveSubscriptionAccess(input: {
     accessStatus: UserAccessStatus;
     subscription: Subscription | null;
 }): boolean {
-    if (input.role === UserRole.SUPER_ADMIN) {
+    if (isAdminRole(input.role)) {
         return true;
     }
 
@@ -85,7 +97,7 @@ export function getAccessSummary(input: {
             planType,
             aiMessageLimitOverride: input.aiMessageLimitOverride,
         }),
-        isSuperAdmin: input.role === UserRole.SUPER_ADMIN,
+        isSuperAdmin: isAdminRole(input.role),
         hasActiveAccess: hasActiveSubscriptionAccess(input),
     };
 }

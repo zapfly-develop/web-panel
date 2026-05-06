@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { getAccessSummary } from "@/lib/saas/access";
+import {
+    getAccessSummary,
+    isMerchantRole,
+    isRiderRole,
+} from "@/lib/saas/access";
 
 const ADMIN_HOME = "/admin/dashboard";
 const STORE_HOME = "/dashboard";
@@ -61,6 +65,11 @@ export default auth(async (req) => {
         where: { id: String(sessionUserId) },
         include: {
             subscription: true,
+            merchantProfile: {
+                select: {
+                    id: true,
+                },
+            },
             riderProfile: {
                 select: {
                     id: true,
@@ -88,7 +97,10 @@ export default auth(async (req) => {
         aiMessageLimitOverride: dbUser.aiMessageLimitOverride,
     });
     const isSuperAdmin = access.isSuperAdmin;
-    const isRider = Boolean(dbUser.riderProfile);
+    const isRider = isRiderRole(dbUser.role) || Boolean(dbUser.riderProfile);
+    const isMerchant =
+        !isRider &&
+        (Boolean(dbUser.merchantProfile) || isMerchantRole(dbUser.role));
     const hasActiveAccess = access.hasActiveAccess;
 
     if (isRiderRegisterRoute) {
@@ -101,7 +113,7 @@ export default auth(async (req) => {
     }
 
     if (isDashboardApiRoute) {
-        if (isSuperAdmin || isRider) {
+        if (isSuperAdmin || isRider || !isMerchant) {
             return NextResponse.json(
                 { error: "Acesso nao permitido para este usuario." },
                 { status: 403 },
@@ -166,6 +178,10 @@ export default auth(async (req) => {
 
         if (isRider) {
             return NextResponse.redirect(new URL(RIDER_HOME, req.nextUrl));
+        }
+
+        if (!isMerchant) {
+            return NextResponse.redirect(new URL("/login", req.nextUrl));
         }
 
         if (!hasActiveAccess) {

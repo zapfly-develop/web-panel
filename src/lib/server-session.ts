@@ -1,6 +1,10 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { getAccessSummary } from "@/lib/saas/access";
+import {
+    getAccessSummary,
+    isMerchantRole,
+    isRiderRole,
+} from "@/lib/saas/access";
 import { redirect } from "next/navigation";
 
 export async function requireSessionUser() {
@@ -14,6 +18,11 @@ export async function requireSessionUser() {
         where: { id: session.user.id },
         include: {
             subscription: true,
+            merchantProfile: {
+                select: {
+                    id: true,
+                },
+            },
             riderProfile: {
                 select: {
                     id: true,
@@ -33,6 +42,10 @@ export async function requireSessionUser() {
         subscription: dbUser.subscription,
         aiMessageLimitOverride: dbUser.aiMessageLimitOverride,
     });
+    const isRider = isRiderRole(dbUser.role) || Boolean(dbUser.riderProfile);
+    const isMerchant =
+        !isRider &&
+        (Boolean(dbUser.merchantProfile) || isMerchantRole(dbUser.role));
 
     return {
         id: dbUser.id,
@@ -44,7 +57,9 @@ export async function requireSessionUser() {
         subscriptionStatus: dbUser.subscription?.status ?? null,
         hasActiveAccess: access.hasActiveAccess,
         isSuperAdmin: access.isSuperAdmin,
-        isRider: Boolean(dbUser.riderProfile),
+        isMerchant,
+        merchantId: dbUser.merchantProfile?.id ?? null,
+        isRider,
         riderStatus: dbUser.riderProfile?.status ?? null,
     };
 }
@@ -68,6 +83,10 @@ export async function requireStoreUser() {
 
     if (user.isRider) {
         redirect("/delivery/rider");
+    }
+
+    if (!user.isMerchant) {
+        redirect("/login");
     }
 
     return user;

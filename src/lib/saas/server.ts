@@ -14,6 +14,8 @@ import {
     UserRole,
 } from "@prisma/client";
 
+const MERCHANT_USER_ROLES = [UserRole.CUSTOMER, UserRole.MERCHANT];
+
 type BillingCheckoutResponse = {
     subscription: Subscription;
     transaction: Transaction;
@@ -167,7 +169,10 @@ export async function getAdminSaasMetrics() {
 
     const [users, transactions, legacySales] = await Promise.all([
         prisma.user.findMany({
-            where: { role: UserRole.CUSTOMER },
+            where: {
+                role: { in: MERCHANT_USER_ROLES },
+                riderProfile: { is: null },
+            },
             include: { subscription: true },
         }),
         prisma.transaction.findMany({
@@ -266,7 +271,8 @@ export async function listSaasUsers(filters?: {
 
     return prisma.user.findMany({
         where: {
-            role: UserRole.CUSTOMER,
+            role: { in: MERCHANT_USER_ROLES },
+            riderProfile: { is: null },
             ...(accessStatus
                 ? {
                       accessStatus,

@@ -2,7 +2,11 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { getAccessSummary } from "@/lib/saas/access";
+import {
+    getAccessSummary,
+    isMerchantRole,
+    isRiderRole,
+} from "@/lib/saas/access";
 
 const AUTH_SILENT_ERROR_CODES = new Set(["CredentialsSignin"]);
 
@@ -27,6 +31,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         where: { email: credentials.email as string },
                         include: {
                             subscription: true,
+                            merchantProfile: {
+                                select: {
+                                    id: true,
+                                },
+                            },
                             riderProfile: {
                                 select: {
                                     id: true,
@@ -55,6 +64,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         subscription: user.subscription,
                         aiMessageLimitOverride: user.aiMessageLimitOverride,
                     });
+                    const isRider =
+                        isRiderRole(user.role) || Boolean(user.riderProfile);
+                    const isMerchant =
+                        !isRider &&
+                        (Boolean(user.merchantProfile) ||
+                            isMerchantRole(user.role));
 
                     return {
                         id: user.id,
@@ -65,7 +80,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         planType: access.planType,
                         subscriptionStatus: user.subscription?.status ?? null,
                         hasActiveAccess: access.hasActiveAccess,
-                        isRider: Boolean(user.riderProfile),
+                        isMerchant,
+                        merchantId: user.merchantProfile?.id ?? null,
+                        isRider,
                         riderStatus: user.riderProfile?.status ?? null,
                     };
                 } catch (error) {
@@ -104,6 +121,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 where: { id: userId },
                 include: {
                     subscription: true,
+                    merchantProfile: {
+                        select: {
+                            id: true,
+                        },
+                    },
                     riderProfile: {
                         select: {
                             id: true,
@@ -123,6 +145,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 subscription: dbUser.subscription,
                 aiMessageLimitOverride: dbUser.aiMessageLimitOverride,
             });
+            const isRider =
+                isRiderRole(dbUser.role) || Boolean(dbUser.riderProfile);
+            const isMerchant =
+                !isRider &&
+                (Boolean(dbUser.merchantProfile) ||
+                    isMerchantRole(dbUser.role));
 
             token.sub = dbUser.id;
             token.name = dbUser.name;
@@ -133,7 +161,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             token.subscriptionStatus = dbUser.subscription?.status ?? null;
             token.hasActiveAccess = access.hasActiveAccess;
             token.isSuperAdmin = access.isSuperAdmin;
-            token.isRider = Boolean(dbUser.riderProfile);
+            token.isMerchant = isMerchant;
+            token.merchantId = dbUser.merchantProfile?.id ?? null;
+            token.isRider = isRider;
             token.riderStatus = dbUser.riderProfile?.status ?? null;
 
             return token;
@@ -147,6 +177,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 session.user.subscriptionStatus = token.subscriptionStatus;
                 session.user.hasActiveAccess = Boolean(token.hasActiveAccess);
                 session.user.isSuperAdmin = Boolean(token.isSuperAdmin);
+                session.user.isMerchant = Boolean(token.isMerchant);
+                session.user.merchantId = token.merchantId;
                 session.user.isRider = Boolean(token.isRider);
                 session.user.riderStatus = token.riderStatus;
             }

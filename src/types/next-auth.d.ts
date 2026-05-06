@@ -20,6 +20,8 @@ declare module "next-auth" {
             subscriptionStatus?: SubscriptionStatus | null;
             hasActiveAccess?: boolean;
             isSuperAdmin?: boolean;
+            isMerchant?: boolean;
+            merchantId?: string | null;
             isRider?: boolean;
             riderStatus?: RiderStatus | null;
         };
@@ -32,6 +34,8 @@ declare module "next-auth" {
         planType?: PlanType | null;
         subscriptionStatus?: SubscriptionStatus | null;
         hasActiveAccess?: boolean;
+        isMerchant?: boolean;
+        merchantId?: string | null;
         isRider?: boolean;
         riderStatus?: RiderStatus | null;
     }
@@ -45,6 +49,8 @@ declare module "next-auth/jwt" {
         subscriptionStatus?: SubscriptionStatus | null;
         hasActiveAccess?: boolean;
         isSuperAdmin?: boolean;
+        isMerchant?: boolean;
+        merchantId?: string | null;
         isRider?: boolean;
         riderStatus?: RiderStatus | null;
     }
