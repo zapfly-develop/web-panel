@@ -17,6 +17,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
     title: "Floovi",
     description: "Plataforma de gestão de pedidos e atendimento humanizado.",
+    icons: {
+        icon: "/icon.png",
+        apple: "/logo-trim.png",
+    },
 };
 
 export default function RootLayout({

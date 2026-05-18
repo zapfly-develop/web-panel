@@ -71,7 +71,10 @@ export function AppTopbar({ user }: AppTopbarProps) {
 
         if (segments[0] === "dashboard") {
             return segments.map((segment, index) => ({
-                label: index === 0 ? "Control Center" : routeLabels[segment] || segment,
+                label:
+                    index === 0
+                        ? "Control Center"
+                        : routeLabels[segment] || segment,
                 href: `/${segments.slice(0, index + 1).join("/")}`,
             }));
         }
@@ -117,13 +120,21 @@ export function AppTopbar({ user }: AppTopbarProps) {
             <div className="flex items-center justify-between gap-4">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                     <SidebarTrigger className="-ml-1 rounded-xl" />
-                    <Separator orientation="vertical" className="hidden h-6 sm:block" />
+                    <Separator
+                        orientation="vertical"
+                        className="hidden h-6 sm:block"
+                    />
 
                     <div className="hidden min-w-0 flex-col gap-1 md:flex">
                         <div className="flex items-center gap-1 text-xs font-semibold text-slate-400">
                             {breadcrumbs.map((crumb, index) => (
-                                <span key={`${crumb.href}-${index}`} className="flex items-center gap-1">
-                                    {index > 0 ? <ChevronRight className="size-3" /> : null}
+                                <span
+                                    key={`${crumb.href}-${index}`}
+                                    className="flex items-center gap-1"
+                                >
+                                    {index > 0 ? (
+                                        <ChevronRight className="size-3" />
+                                    ) : null}
                                     <Link
                                         href={crumb.href}
                                         className={cn(
@@ -138,7 +149,7 @@ export function AppTopbar({ user }: AppTopbarProps) {
                             ))}
                         </div>
                         <p className="text-sm font-bold text-slate-950">
-                            SaaS Omnichannel Control Center
+                            Floovi Omnichannel Control Center
                         </p>
                     </div>
 
@@ -166,7 +177,9 @@ export function AppTopbar({ user }: AppTopbarProps) {
                                     {isOpen ? "Loja Aberta" : "Loja Fechada"}
                                 </p>
                                 <p className="mt-1 text-[10px] font-medium text-slate-400">
-                                    {isPending ? "Atualizando..." : "Store status"}
+                                    {isPending
+                                        ? "Atualizando..."
+                                        : "Store status"}
                                 </p>
                             </div>
                         </div>
@@ -206,7 +219,10 @@ export function AppTopbar({ user }: AppTopbarProps) {
                                 </span>
                             </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-64 rounded-2xl p-2">
+                        <DropdownMenuContent
+                            align="end"
+                            className="w-64 rounded-2xl p-2"
+                        >
                             <DropdownMenuLabel className="px-2 py-2">
                                 <span className="block text-sm font-bold text-slate-900">
                                     {user.name || "Lojista Floovi"}
