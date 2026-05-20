@@ -54,6 +54,7 @@ export async function requireSessionUser() {
         role: dbUser.role,
         accessStatus: dbUser.accessStatus,
         planType: access.planType,
+        manualStoreClosed: dbUser.manualStoreClosed,
         subscriptionStatus: dbUser.subscription?.status ?? null,
         hasActiveAccess: access.hasActiveAccess,
         isSuperAdmin: access.isSuperAdmin,
