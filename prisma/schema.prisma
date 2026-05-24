@@ -19,6 +19,11 @@ enum UserAccessStatus {
   BANNED
 }
 
+enum PushTokenType {
+  EXPO
+  WEB_PUSH
+}
+
 enum PlanType {
   FREE
   BASIC
@@ -64,30 +69,45 @@ model User {
   createdAt                    DateTime         @default(now())
   updatedAt                    DateTime         @updatedAt
 
-  bots                 BotAccount[]
-  products             Product[]
-  templates            MessageTemplate[]
-  subscription         Subscription?
-  transactions         Transaction[]
-  whatsappInstances    WhatsappInstance[]
-  whatsappCustomers    WhatsappCustomer[]
-  orders               Order[]                      @relation("UserOrders")
-  storeAddressDetails  StoreAddress?
-  whatsappHandovers    WhatsappHandover[]
-  operatingHours       OperatingHour[]              @relation("SubscriberOperatingHours")
-  tags                 Tag[]                        @relation("SubscriberTags")
-  productTags          ProductTags[]                @relation("SubscriberProductTags")
-  merchantProfile      Merchant?                    @relation("MerchantUser")
-  riderProfile         Rider?                       @relation("RiderUser")
-  storeRiders          Rider[]                      @relation("StoreOwnedRiders")
-  storeDeliveries      Delivery[]                   @relation("StoreDeliveries")
-  deliveryPayouts      DeliveryPayout[]             @relation("StoreDeliveryPayouts")
-  safetyFundCoverages  DeliverySafetyFundCoverage[] @relation("StoreSafetyFundCoverages")
-  pushSubscriptions    PushSubscription[]
-  wallet               Wallet?
-  walletTransactions   WalletTransaction[]
-  storeDeliveryRatings DeliveryRating[]             @relation("StoreDeliveryRatings")
-  refreshTokens        RefreshToken[]
+  bots                      BotAccount[]
+  products                  Product[]
+  templates                 MessageTemplate[]
+  subscription              Subscription?
+  transactions              Transaction[]
+  whatsappInstances         WhatsappInstance[]
+  whatsappCustomers         WhatsappCustomer[]
+  orders                    Order[]                         @relation("UserOrders")
+  storeAddressDetails       StoreAddress?
+  whatsappHandovers         WhatsappHandover[]
+  operatingHours            OperatingHour[]                 @relation("SubscriberOperatingHours")
+  tags                      Tag[]                           @relation("SubscriberTags")
+  productTags               ProductTags[]                   @relation("SubscriberProductTags")
+  merchantProfile           Merchant?                       @relation("MerchantUser")
+  riderProfile              Rider?                          @relation("RiderUser")
+  storeRiders               Rider[]                         @relation("StoreOwnedRiders")
+  storeDeliveries           Delivery[]                      @relation("StoreDeliveries")
+  deliveryRuns              DeliveryRun[]                   @relation("StoreDeliveryRuns")
+  deliveryPayouts           DeliveryPayout[]                @relation("StoreDeliveryPayouts")
+  safetyFundCoverages       DeliverySafetyFundCoverage[]    @relation("StoreSafetyFundCoverages")
+  pushSubscriptions         PushSubscription[]
+  deviceTokens              UserDeviceToken[]
+  wallet                    Wallet?
+  walletTransactions        WalletTransaction[]
+  storeDeliveryRatings      DeliveryRating[]                @relation("StoreDeliveryRatings")
+  refreshTokens             RefreshToken[]
+  integrationConfigs        IntegrationConfig[]
+  warehouses                Warehouse[]
+  stockMovements            StockMovement[]
+  pickingTasks              PickingTask[]
+  packedPickingTasks        PickingTask[]                   @relation("PackingOperator")
+  inventoryCycleCounts      InventoryCycleCount[]
+  startedCycleCounts        InventoryCycleCount[]           @relation("CycleCountStarter")
+  completedCycleCounts      InventoryCycleCount[]           @relation("CycleCountCompleter")
+  productMappings           ProductMapping[]
+  inboundOrders             InboundOrder[]
+  layoutRecommendations     WarehouseLayoutRecommendation[]
+  internalTransferTasks     InternalTransferTask[]
+  assignedInternalTransfers InternalTransferTask[]          @relation("InternalTransferOperator")
 }
 
 model Merchant {
@@ -146,6 +166,7 @@ model StoreAddress {
   formattedAddress String   @db.Text
   latitude         Float
   longitude        Float
+  h3Index          String?  @db.VarChar(15)
   geocodedAt       DateTime @default(now())
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -153,6 +174,7 @@ model StoreAddress {
   ownerUser User @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
 
   @@index([city, state])
+  @@index([h3Index])
 }
 
 model PushSubscription {
@@ -169,6 +191,26 @@ model PushSubscription {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, updatedAt])
+}
+
+model UserDeviceToken {
+  id             String        @id @default(uuid())
+  userId         String
+  token          String        @db.Text
+  type           PushTokenType
+  p256dh         String?       @db.Text
+  auth           String?       @db.Text
+  expirationTime DateTime?
+  userAgent      String?       @db.Text
+  deviceId       String?
+  platform       String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([type, token])
+  @@index([userId, type, updatedAt])
 }
 
 model OperatingHour {
@@ -561,6 +603,52 @@ enum ProductType {
   SUBSCRIPTION
 }
 
+enum StockMovementType {
+  INBOUND
+  OUTBOUND
+  ADJUSTMENT
+  LOSS
+}
+
+enum StorageLocationType {
+  PICKING
+  BULK
+  RECEIVING
+}
+
+enum InboundOrderStatus {
+  PENDING_MAPPING
+  READY_TO_RECEIVE
+  RECEIVED
+  CANCELLED
+}
+
+enum AbcCurve {
+  A
+  B
+  C
+}
+
+enum WarehouseRecommendationStatus {
+  PENDING
+  CONVERTED
+  DISMISSED
+}
+
+enum InternalTransferStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELED
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 model Tag {
   id           String @id @default(uuid())
   name         String
@@ -581,7 +669,9 @@ model Product {
   imageUrl              String?
   priceCents            Int
   promotionalPriceCents Int?
+  sku                   String?
   stockQuantity         Int?
+  reservedStockQuantity Int         @default(0)
   category              String?
   currency              String      @default("BRL")
   isActive              Boolean     @default(true)
@@ -590,14 +680,269 @@ model Product {
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt
 
-  ownerUser       User?            @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
-  sales           Sale[]
-  discountConfigs DiscountConfig[]
-  orderItems      OrderItem[]
-  productTags     ProductTags[]
+  ownerUser             User?                           @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
+  sales                 Sale[]
+  discountConfigs       DiscountConfig[]
+  orderItems            OrderItem[]
+  productTags           ProductTags[]
+  stockMovements        StockMovement[]
+  pickingItems          PickingTaskItem[]
+  productMappings       ProductMapping[]
+  inboundItems          InboundOrderItem[]
+  layoutRecommendations WarehouseLayoutRecommendation[]
+  internalTransferTasks InternalTransferTask[]
 
+  @@unique([ownerUserId, sku])
   @@index([ownerUserId])
   @@index([ownerUserId, category, isActive])
+}
+
+model Warehouse {
+  id          String   @id @default(cuid())
+  name        String
+  ownerUserId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ownerUser             User                            @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  storageLocations      StorageLocation[]
+  cycleCounts           InventoryCycleCount[]
+  inboundOrders         InboundOrder[]
+  layoutRecommendations WarehouseLayoutRecommendation[]
+  internalTransferTasks InternalTransferTask[]
+
+  @@index([ownerUserId])
+}
+
+model StorageLocation {
+  id          String              @id @default(cuid())
+  warehouseId String
+  aisle       String
+  shelf       String
+  bin         String
+  type        StorageLocationType @default(PICKING)
+  code        String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  warehouse                    Warehouse                       @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  stockMovements               StockMovement[]
+  pickingItems                 PickingTaskItem[]
+  cycleCountLocks              InventoryCycleCountLocation[]
+  inboundItems                 InboundOrderItem[]
+  currentLayoutRecommendations WarehouseLayoutRecommendation[] @relation("CurrentLayoutLocation")
+  idealLayoutRecommendations   WarehouseLayoutRecommendation[] @relation("IdealLayoutLocation")
+  transfersFrom                InternalTransferTask[]          @relation("SourceLocation")
+  transfersTo                  InternalTransferTask[]          @relation("TargetLocation")
+
+  @@unique([warehouseId, aisle, shelf, bin])
+  @@unique([warehouseId, code])
+  @@index([warehouseId, type])
+  @@index([warehouseId, type, code], map: "StorageLocation_wms_layout_idx")
+}
+
+model StockMovement {
+  id                String            @id @default(cuid())
+  type              StockMovementType
+  quantity          Int
+  productId         String
+  storageLocationId String?
+  userId            String
+  reason            String?           @db.Text
+  pickingTaskItemId String?           @unique
+  createdAt         DateTime          @default(now())
+
+  product         Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
+  storageLocation StorageLocation? @relation(fields: [storageLocationId], references: [id], onDelete: SetNull)
+  user            User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  pickingTaskItem PickingTaskItem? @relation(fields: [pickingTaskItemId], references: [id], onDelete: SetNull)
+
+  @@index([productId, createdAt])
+  @@index([storageLocationId, createdAt])
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+  @@index([productId, storageLocationId, type, createdAt], map: "StockMovement_wms_analysis_idx")
+  @@index([storageLocationId, productId, type], map: "StockMovement_wms_location_balance_idx")
+}
+
+model InventoryCycleCount {
+  id            String     @id @default(cuid())
+  ownerUserId   String
+  warehouseId   String
+  status        TaskStatus @default(IN_PROGRESS)
+  reason        String?    @db.Text
+  startedById   String
+  completedById String?
+  startedAt     DateTime   @default(now())
+  completedAt   DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  ownerUser   User                          @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  warehouse   Warehouse                     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  startedBy   User                          @relation("CycleCountStarter", fields: [startedById], references: [id], onDelete: Restrict)
+  completedBy User?                         @relation("CycleCountCompleter", fields: [completedById], references: [id], onDelete: SetNull)
+  locations   InventoryCycleCountLocation[]
+
+  @@index([ownerUserId, status, createdAt])
+  @@index([warehouseId, status])
+  @@index([startedById])
+  @@index([completedById])
+}
+
+model InventoryCycleCountLocation {
+  id                String     @id @default(cuid())
+  cycleCountId      String
+  storageLocationId String
+  status            TaskStatus @default(IN_PROGRESS)
+  lockedAt          DateTime   @default(now())
+  countedAt         DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  cycleCount      InventoryCycleCount @relation(fields: [cycleCountId], references: [id], onDelete: Cascade)
+  storageLocation StorageLocation     @relation(fields: [storageLocationId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleCountId, storageLocationId])
+  @@index([storageLocationId, status])
+  @@index([cycleCountId, status])
+}
+
+model ProductMapping {
+  id                  String   @id @default(cuid())
+  ownerUserId         String
+  providerDocument    String
+  providerName        String?
+  productProviderCode String
+  internalProductId   String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  ownerUser       User    @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  internalProduct Product @relation(fields: [internalProductId], references: [id], onDelete: Restrict)
+
+  @@unique([ownerUserId, providerDocument, productProviderCode])
+  @@index([ownerUserId, providerDocument])
+  @@index([internalProductId])
+}
+
+model InboundOrder {
+  id               String             @id @default(cuid())
+  ownerUserId      String
+  warehouseId      String?
+  status           InboundOrderStatus @default(PENDING_MAPPING)
+  source           String             @default("NFE_XML")
+  invoiceAccessKey String?            @unique
+  invoiceNumber    String?
+  invoiceSeries    String?
+  providerDocument String
+  providerName     String?
+  totalCents       Int                @default(0)
+  rawPayload       Json?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  ownerUser User               @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  warehouse Warehouse?         @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  items     InboundOrderItem[]
+
+  @@index([ownerUserId, status, createdAt])
+  @@index([providerDocument, createdAt])
+}
+
+model InboundOrderItem {
+  id                         String   @id @default(cuid())
+  inboundOrderId             String
+  internalProductId          String?
+  suggestedStorageLocationId String?
+  providerCode               String
+  description                String
+  ncm                        String?
+  gtin                       String?
+  quantity                   Int
+  unitValueCents             Int
+  totalValueCents            Int
+  isMapped                   Boolean  @default(false)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  inboundOrder             InboundOrder     @relation(fields: [inboundOrderId], references: [id], onDelete: Cascade)
+  internalProduct          Product?         @relation(fields: [internalProductId], references: [id], onDelete: SetNull)
+  suggestedStorageLocation StorageLocation? @relation(fields: [suggestedStorageLocationId], references: [id], onDelete: SetNull)
+
+  @@index([inboundOrderId])
+  @@index([internalProductId])
+  @@index([suggestedStorageLocationId])
+  @@index([providerCode])
+}
+
+model WarehouseLayoutRecommendation {
+  id                       String                        @id @default(cuid())
+  ownerUserId              String
+  warehouseId              String
+  productId                String
+  currentStorageLocationId String?
+  idealStorageLocationId   String?
+  abcCurve                 AbcCurve
+  periodDays               Int
+  outbound30               Int                           @default(0)
+  outbound60               Int                           @default(0)
+  outbound90               Int                           @default(0)
+  selectedOutboundQuantity Int                           @default(0)
+  totalOutboundQuantity    Int                           @default(0)
+  cumulativeShare          Float                         @default(0)
+  currentLocationCode      String?
+  idealLocationCode        String?
+  priorityScore            Int                           @default(0)
+  reason                   String?                       @db.Text
+  status                   WarehouseRecommendationStatus @default(PENDING)
+  createdAt                DateTime                      @default(now())
+  updatedAt                DateTime                      @updatedAt
+
+  ownerUser       User                  @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  warehouse       Warehouse             @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  product         Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
+  currentLocation StorageLocation?      @relation("CurrentLayoutLocation", fields: [currentStorageLocationId], references: [id], onDelete: SetNull)
+  idealLocation   StorageLocation?      @relation("IdealLayoutLocation", fields: [idealStorageLocationId], references: [id], onDelete: SetNull)
+  transferTask    InternalTransferTask?
+
+  @@index([ownerUserId, warehouseId, status, createdAt])
+  @@index([warehouseId, abcCurve, priorityScore])
+  @@index([productId, periodDays])
+  @@index([idealStorageLocationId])
+}
+
+model InternalTransferTask {
+  id                 String                 @id @default(uuid())
+  ownerUserId        String
+  warehouseId        String
+  recommendationId   String?                @unique
+  productId          String
+  sourceLocationId   String
+  targetLocationId   String
+  quantity           Int                    @default(1)
+  status             InternalTransferStatus @default(PENDING)
+  assignedOperatorId String?
+  reason             String?                @db.Text
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  startedAt          DateTime?
+  completedAt        DateTime?
+
+  ownerUser        User                           @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  warehouse        Warehouse                      @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  recommendation   WarehouseLayoutRecommendation? @relation(fields: [recommendationId], references: [id], onDelete: SetNull)
+  product          Product                        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  sourceLocation   StorageLocation                @relation("SourceLocation", fields: [sourceLocationId], references: [id], onDelete: Restrict)
+  targetLocation   StorageLocation                @relation("TargetLocation", fields: [targetLocationId], references: [id], onDelete: Restrict)
+  assignedOperator User?                          @relation("InternalTransferOperator", fields: [assignedOperatorId], references: [id], onDelete: SetNull)
+
+  @@index([ownerUserId, status])
+  @@index([ownerUserId, warehouseId, status, createdAt])
+  @@index([productId, status])
+  @@index([targetLocationId])
+  @@index([sourceLocationId])
+  @@index([assignedOperatorId])
 }
 
 model ProductTags {
@@ -618,8 +963,19 @@ model ProductTags {
 enum OrderStatus {
   PENDING
   PREPARING
+  READY_FOR_SHIPPING
+  READY_FOR_DELIVERY
   SHIPPED
   DELIVERED
+}
+
+enum OrderSource {
+  FLOOVI_WHATSAPP
+  TRAY
+  NUVEMSHOP
+  UAPPI
+  OLIST
+  MERCADOLIVRE
 }
 
 enum RiderStatus {
@@ -659,6 +1015,14 @@ enum DeliveryStatus {
   CANCELED
 }
 
+enum DeliveryRunStatus {
+  PENDING_ASSIGNMENT
+  ASSIGNED
+  IN_TRANSIT
+  COMPLETED
+  CANCELLED
+}
+
 enum DeliveryEventType {
   CLIENT_ABSENT_REPORTED
   RIDER_STALLED_WARNING
@@ -691,32 +1055,55 @@ enum DeliveryPayoutSettlementType {
 }
 
 model Order {
-  id                 String         @id @default(cuid())
-  ownerUserId        String?
-  whatsappInstanceId String?
-  customerWhatsappId String
-  customerName       String?
-  status             OrderStatus    @default(PENDING)
-  paymentMethod      PaymentMethod?
-  paymentStatus      String         @default("PENDING")
-  deliveryType       DeliveryType?
-  changeAmount       Float?
-  pixPayload         String?        @db.Text
-  deliveryFeeCents   Int            @default(0)
-  totalCents         Int
-  currency           String         @default("BRL")
-  deliveryAddress    String
-  notes              String?
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+  id                   String         @id @default(cuid())
+  ownerUserId          String?
+  whatsappInstanceId   String?
+  source               OrderSource    @default(FLOOVI_WHATSAPP)
+  externalOrderId      String?
+  externalOrderNumber  String?
+  customerWhatsappId   String
+  customerName         String?
+  customerEmail        String?
+  customerDocument     String?
+  customerPhone        String?
+  status               OrderStatus    @default(PENDING)
+  paymentMethod        PaymentMethod?
+  paymentStatus        String         @default("PENDING")
+  deliveryType         DeliveryType?
+  changeAmount         Float?
+  pixPayload           String?        @db.Text
+  subtotalCents        Int            @default(0)
+  discountCents        Int            @default(0)
+  externalShippingFee  Int            @default(0)
+  flooviDeliveryFee    Int            @default(0)
+  deliveryFeeCents     Int            @default(0)
+  totalCents           Int
+  currency             String         @default("BRL")
+  deliveryAddress      String
+  deliveryStreet       String?
+  deliveryNumber       String?
+  deliveryNeighborhood String?
+  deliveryCity         String?
+  deliveryState        String?
+  deliveryZipCode      String?
+  deliveryLatitude     Float?
+  deliveryLongitude    Float?
+  notes                String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
-  ownerUser        User?             @relation("UserOrders", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  whatsappInstance WhatsappInstance? @relation(fields: [whatsappInstanceId], references: [id], onDelete: SetNull)
-  items            OrderItem[]
-  delivery         Delivery?
+  ownerUser          User?               @relation("UserOrders", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  whatsappInstance   WhatsappInstance?   @relation(fields: [whatsappInstanceId], references: [id], onDelete: SetNull)
+  items              OrderItem[]
+  delivery           Delivery?
+  pickingTask        PickingTask?
+  deliveryRunPackage DeliveryRunPackage?
 
+  @@unique([ownerUserId, source, externalOrderId])
   @@index([ownerUserId, status, createdAt])
   @@index([whatsappInstanceId, customerWhatsappId, createdAt])
+  @@index([source])
+  @@index([externalOrderId])
 }
 
 model Rider {
@@ -738,14 +1125,15 @@ model Rider {
   createdAt            DateTime                @default(now())
   updatedAt            DateTime                @updatedAt
 
-  user       User               @relation("RiderUser", fields: [userId], references: [id], onDelete: Cascade)
-  ownerUser  User?              @relation("StoreOwnedRiders", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  deliveries Delivery[]
-  locations  DeliveryLocation[]
-  incidents  DeliveryIncident[]
-  payouts    DeliveryPayout[]
-  events     DeliveryEvent[]
-  ratings    DeliveryRating[]
+  user         User               @relation("RiderUser", fields: [userId], references: [id], onDelete: Cascade)
+  ownerUser    User?              @relation("StoreOwnedRiders", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  deliveries   Delivery[]
+  deliveryRuns DeliveryRun[]
+  locations    DeliveryLocation[]
+  incidents    DeliveryIncident[]
+  payouts      DeliveryPayout[]
+  events       DeliveryEvent[]
+  ratings      DeliveryRating[]
 
   @@index([ownerUserId, status])
   @@index([availabilityStatus, status])
@@ -775,6 +1163,7 @@ model Delivery {
   destinationAddress             String                   @db.Text
   destinationLatitude            Float?
   destinationLongitude           Float?
+  h3Index                        String?                  @db.VarChar(15)
   acceptedAt                     DateTime?
   acceptedLatitude               Float?                   @map("accepted_latitude")
   acceptedLongitude              Float?                   @map("accepted_longitude")
@@ -799,6 +1188,7 @@ model Delivery {
   payout             DeliveryPayout?
   safetyFundCoverage DeliverySafetyFundCoverage?
   rating             DeliveryRating?
+  runPackage         DeliveryRunPackage?
 
   @@index([ownerUserId, status, createdAt])
   @@index([riderId, status])
@@ -806,6 +1196,50 @@ model Delivery {
   @@index([status, isHighPriority, updatedAt])
   @@index([status, createdAt])
   @@index([status, updatedAt])
+  @@index([h3Index])
+}
+
+model DeliveryRun {
+  id            String            @id @default(cuid())
+  ownerUserId   String
+  riderId       String?
+  zone          String
+  status        DeliveryRunStatus @default(PENDING_ASSIGNMENT)
+  packageCount  Int               @default(0)
+  totalVolume   Int               @default(0)
+  priorityScore Int               @default(0)
+  assignedAt    DateTime?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  ownerUser User                 @relation("StoreDeliveryRuns", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  rider     Rider?               @relation(fields: [riderId], references: [id], onDelete: SetNull)
+  packages  DeliveryRunPackage[]
+
+  @@index([ownerUserId, status, zone, createdAt])
+  @@index([riderId, status])
+  @@index([zone, status])
+}
+
+model DeliveryRunPackage {
+  id            String   @id @default(cuid())
+  deliveryRunId String
+  deliveryId    String   @unique
+  orderId       String   @unique
+  packageCode   String?
+  volumeUnits   Int      @default(1)
+  priorityScore Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  deliveryRun DeliveryRun @relation(fields: [deliveryRunId], references: [id], onDelete: Cascade)
+  delivery    Delivery    @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryRunId, createdAt])
+  @@index([priorityScore])
 }
 
 model DeliveryRating {
@@ -866,6 +1300,7 @@ model DeliveryLocation {
   riderId        String?
   latitude       Float
   longitude      Float
+  h3Index        String?  @db.VarChar(15)
   accuracyMeters Float?
   recordedAt     DateTime @default(now())
   createdAt      DateTime @default(now())
@@ -875,6 +1310,7 @@ model DeliveryLocation {
 
   @@index([deliveryId, recordedAt])
   @@index([riderId, recordedAt])
+  @@index([h3Index])
 }
 
 model DeliveryPayout {
@@ -900,6 +1336,7 @@ model DeliveryPayout {
   ownerUser User     @relation("StoreDeliveryPayouts", fields: [ownerUserId], references: [id], onDelete: Cascade)
 
   @@index([riderId, status, createdAt])
+  @@index([riderId, status, processedAt])
   @@index([ownerUserId, status, createdAt])
 }
 
@@ -922,17 +1359,70 @@ model DeliverySafetyFundCoverage {
 model OrderItem {
   id             String   @id @default(cuid())
   orderId        String
-  productId      String
+  productId      String?
+  productName    String?
+  sku            String?
+  variantName    String?
   quantity       Int
   unitPriceCents Int
   subtotalCents  Int
   createdAt      DateTime @default(now())
 
-  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id])
+  order        Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product      Product?          @relation(fields: [productId], references: [id], onDelete: SetNull)
+  pickingItems PickingTaskItem[]
 
   @@index([orderId])
   @@index([productId])
+}
+
+model PickingTask {
+  id          String     @id @default(cuid())
+  ownerUserId String
+  orderId     String     @unique
+  status      TaskStatus @default(PENDING)
+  packingCode String?    @unique
+  packedById  String?
+  packedAt    DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  ownerUser User              @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  packedBy  User?             @relation("PackingOperator", fields: [packedById], references: [id], onDelete: SetNull)
+  order     Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  items     PickingTaskItem[]
+
+  @@index([ownerUserId, status, createdAt])
+  @@index([packedById, packedAt])
+  @@index([orderId, status])
+}
+
+model PickingTaskItem {
+  id                String     @id @default(cuid())
+  taskId            String
+  orderItemId       String
+  productId         String
+  storageLocationId String
+  sku               String
+  quantity          Int
+  confirmedQuantity Int        @default(0)
+  status            TaskStatus @default(PENDING)
+  routeOrder        Int
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  task            PickingTask     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  orderItem       OrderItem       @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  product         Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  storageLocation StorageLocation @relation(fields: [storageLocationId], references: [id], onDelete: Restrict)
+  stockMovement   StockMovement?
+
+  @@unique([taskId, orderItemId])
+  @@index([taskId, status, routeOrder])
+  @@index([productId, status])
+  @@index([storageLocationId])
 }
 
 enum SaleStatus {
@@ -972,6 +1462,26 @@ model WebhookEvent {
   referenceId String?
   rawPayload  Json
   receivedAt  DateTime @default(now())
+}
+
+model IntegrationConfig {
+  id             String      @id @default(cuid())
+  ownerUserId    String
+  source         OrderSource
+  externalUserId String
+  accessToken    String      @db.Text
+  refreshToken   String?     @db.Text
+  tokenExpiresAt DateTime?
+  isActive       Boolean     @default(true)
+  metadata       Json?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  ownerUser User @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@unique([source, externalUserId])
+  @@index([ownerUserId, source])
+  @@index([source, isActive])
 }
 
 enum MessageDirection {
