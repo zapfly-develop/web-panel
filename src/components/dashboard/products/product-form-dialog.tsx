@@ -2,11 +2,20 @@
 
 import { ReactNode, useActionState, useEffect, useState } from "react";
 import { ProductType } from "@prisma/client";
-import { Loader2, PackagePlus, Pencil } from "lucide-react";
+import {
+    AlertTriangle,
+    Barcode,
+    Boxes,
+    Loader2,
+    PackagePlus,
+    Pencil,
+    Tags,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
+    DialogClose,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -16,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
     Select,
     SelectContent,
@@ -71,9 +81,11 @@ type ProductEditDialogProps = ProductDialogBaseProps & {
         description: string | null;
         imageUrl: string | null;
         category: string | null;
+        sku: string | null;
         priceCents: number;
         promotionalPriceCents: number | null;
         stockQuantity: number | null;
+        reservedStockQuantity: number;
         productType: ProductType;
         subscriberDays: number | null;
         productTags: Array<{
@@ -82,6 +94,7 @@ type ProductEditDialogProps = ProductDialogBaseProps & {
             };
         }>;
     };
+    showTrigger?: boolean;
 };
 
 function centsToInputValue(valueCents: number | null): string {
@@ -120,6 +133,8 @@ function ProductForm({
         action,
         initialProductFormState,
     );
+    const reservedStockQuantity = Number(initialValues.reservedStockQuantity) || 0;
+    const hasReservedStock = mode === "edit" && reservedStockQuantity > 0;
 
     useEffect(() => {
         if (state.status !== "success") {
@@ -131,7 +146,7 @@ function ProductForm({
     }, [onSuccess, state.status, successMessage]);
 
     return (
-        <form action={submitAction} className="grid gap-5">
+        <form action={submitAction} className="grid gap-6">
             {productId ? <input type="hidden" name="productId" value={productId} /> : null}
 
             {state.formError && state.status === "error" && (
@@ -140,8 +155,13 @@ function ProductForm({
                 </div>
             )}
 
-            <div className="grid gap-5 md:grid-cols-2">
-                <div className="grid gap-2 md:col-span-2">
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.85fr)]">
+            <section className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                    Informacoes gerais
+                </p>
+
+                <div className="grid gap-2">
                     <Label htmlFor={`${mode}-title`}>Nome do produto</Label>
                     <Input
                         id={`${mode}-title`}
@@ -157,7 +177,7 @@ function ProductForm({
                     )}
                 </div>
 
-                <div className="grid gap-2 md:col-span-2">
+                <div className="grid gap-2">
                     <Label htmlFor={`${mode}-description`}>Descricao</Label>
                     <Textarea
                         id={`${mode}-description`}
@@ -173,41 +193,12 @@ function ProductForm({
                     )}
                 </div>
 
-                <ProductImageDropzone
-                    name="imageUrl"
-                    initialValue={initialValues.imageUrl}
-                    error={state.fieldErrors.imageUrl}
-                />
+            </section>
 
-                <div className="grid gap-2">
-                    <Label>Categoria</Label>
-                    <ProductCategoryCombobox
-                        categories={categories}
-                        value={category}
-                        onChange={setCategory}
-                    />
-                    <input type="hidden" name="category" value={category} />
-                    {state.fieldErrors.category && (
-                        <p className="text-sm text-destructive">
-                            {state.fieldErrors.category}
-                        </p>
-                    )}
-                </div>
-
-                <div className="grid gap-2 md:col-span-2">
-                    <Label>Tags</Label>
-                    <ProductTagsInput
-                        availableTags={availableTags}
-                        value={tags}
-                        onChange={setTags}
-                    />
-                    <input type="hidden" name="tags" value={JSON.stringify(tags)} />
-                    {state.fieldErrors.tags && (
-                        <p className="text-sm text-destructive">
-                            {state.fieldErrors.tags}
-                        </p>
-                    )}
-                </div>
+            <section className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                    Comercial
+                </p>
 
                 <div className="grid gap-2">
                     <Label>Tipo</Label>
@@ -280,26 +271,8 @@ function ProductForm({
                     )}
                 </div>
 
-                <div className="grid gap-2">
-                    <Label htmlFor={`${mode}-stockQuantity`}>Estoque</Label>
-                    <Input
-                        id={`${mode}-stockQuantity`}
-                        name="stockQuantity"
-                        type="number"
-                        min="0"
-                        step="1"
-                        placeholder="Deixe vazio para estoque livre"
-                        defaultValue={initialValues.stockQuantity}
-                    />
-                    {state.fieldErrors.stockQuantity && (
-                        <p className="text-sm text-destructive">
-                            {state.fieldErrors.stockQuantity}
-                        </p>
-                    )}
-                </div>
-
                 {productType === ProductType.SUBSCRIPTION && (
-                    <div className="grid gap-2 md:col-span-2">
+                    <div className="grid gap-2">
                         <Label htmlFor={`${mode}-subscriberDays`}>
                             Duracao da assinatura
                         </Label>
@@ -319,10 +292,163 @@ function ProductForm({
                         )}
                     </div>
                 )}
+            </section>
+
+            <section className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                    Midia do produto
+                </p>
+
+                <ProductImageDropzone
+                    name="imageUrl"
+                    initialValue={initialValues.imageUrl}
+                    error={state.fieldErrors.imageUrl}
+                />
+            </section>
+
+            <section className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                    Categoria e tags
+                </p>
+
+                <div className="grid gap-2">
+                    <Label>Categoria</Label>
+                    <ProductCategoryCombobox
+                        categories={categories}
+                        value={category}
+                        onChange={setCategory}
+                    />
+                    <input type="hidden" name="category" value={category} />
+                    {state.fieldErrors.category && (
+                        <p className="text-sm text-destructive">
+                            {state.fieldErrors.category}
+                        </p>
+                    )}
+                </div>
+
+                <div className="grid gap-2">
+                    <Label className="flex items-center gap-2 text-blue-700">
+                        <Tags className="h-4 w-4" />
+                        Tags
+                    </Label>
+                    <ProductTagsInput
+                        availableTags={availableTags}
+                        value={tags}
+                        onChange={setTags}
+                    />
+                    <input type="hidden" name="tags" value={JSON.stringify(tags)} />
+                    {state.fieldErrors.tags && (
+                        <p className="text-sm text-destructive">
+                            {state.fieldErrors.tags}
+                        </p>
+                    )}
+                </div>
+            </section>
+
+            <section className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                    Estoque e WMS
+                </p>
+
+                <div className="grid gap-2">
+                    <Label
+                        htmlFor={`${mode}-sku`}
+                        className="flex items-center gap-2 text-blue-700"
+                    >
+                        <Barcode className="h-4 w-4" />
+                        SKU
+                    </Label>
+                    <Input
+                        id={`${mode}-sku`}
+                        name="sku"
+                        placeholder="Ex.: BEB-COCA-2L"
+                        defaultValue={initialValues.sku}
+                        required
+                    />
+                    {state.fieldErrors.sku && (
+                        <p className="text-sm text-destructive">
+                            {state.fieldErrors.sku}
+                        </p>
+                    )}
+                </div>
+
+                <div className="grid gap-2">
+                    <Label
+                        htmlFor={`${mode}-stockQuantity`}
+                        className="flex items-center gap-2 text-blue-700"
+                    >
+                        <Boxes className="h-4 w-4" />
+                        Estoque
+                    </Label>
+                    <Input
+                        id={`${mode}-stockQuantity`}
+                        name="stockQuantity"
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="Deixe vazio para estoque livre"
+                        defaultValue={initialValues.stockQuantity}
+                    />
+                    {state.fieldErrors.stockQuantity && (
+                        <p className="text-sm text-destructive">
+                            {state.fieldErrors.stockQuantity}
+                        </p>
+                    )}
+                </div>
+
+                {mode === "edit" && (
+                    <div
+                        className={`grid gap-2 rounded-lg border px-3 py-3 ${
+                            hasReservedStock
+                                ? "border-blue-200 bg-blue-50/70"
+                                : "border-slate-200 bg-slate-50/70"
+                        }`}
+                    >
+                        <div className="flex items-center justify-between gap-3">
+                            <Label htmlFor={`${mode}-reservedStockQuantity`}>
+                                Estoque reservado
+                            </Label>
+                            {hasReservedStock ? (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800">
+                                    <AlertTriangle className="h-3.5 w-3.5" />
+                                    Reservado
+                                </span>
+                            ) : null}
+                        </div>
+                        <Input
+                            id={`${mode}-reservedStockQuantity`}
+                            name="reservedStockQuantity"
+                            value={initialValues.reservedStockQuantity}
+                            readOnly
+                            aria-readonly="true"
+                            className="bg-white/70 font-medium text-slate-700"
+                        />
+                        {hasReservedStock ? (
+                            <p className="text-xs text-blue-800">
+                                Esta quantidade esta bloqueada em carrinhos ou
+                                ordens de separacao e nao pode ser editada aqui.
+                            </p>
+                        ) : (
+                            <p className="text-xs text-muted-foreground">
+                                Nenhuma unidade reservada para separacao no momento.
+                            </p>
+                        )}
+                    </div>
+                )}
+            </section>
             </div>
 
-            <DialogFooter className="gap-2 sm:justify-end">
-                <Button type="submit" disabled={isPending}>
+            <DialogFooter className="gap-2 sm:justify-between">
+                <DialogClose asChild>
+                    <Button type="button" variant="outline" disabled={isPending}>
+                        Cancelar
+                    </Button>
+                </DialogClose>
+                <Button
+                    type="submit"
+                    disabled={isPending}
+                    className="bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+                >
                     {isPending ? (
                         <>
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -367,24 +493,43 @@ function ProductDialog({
     return (
         <Dialog open={isOpen} onOpenChange={handleOpenChange}>
             {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
-            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-                <DialogHeader>
-                    <DialogTitle>{title}</DialogTitle>
-                    <DialogDescription>{description}</DialogDescription>
+            <DialogContent className="flex h-[92vh] max-h-[92vh] flex-col overflow-hidden border-slate-200 bg-slate-50 p-0 shadow-2xl sm:max-w-5xl">
+                <DialogHeader className="shrink-0 px-6 pt-6">
+                    <div className="flex items-start gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
+                            <PackagePlus className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0 space-y-1.5">
+                            <DialogTitle className="text-xl text-slate-950">
+                                {title}
+                            </DialogTitle>
+                            <DialogDescription className="max-w-2xl text-slate-600">
+                                {description}
+                            </DialogDescription>
+                        </div>
+                    </div>
                 </DialogHeader>
 
                 {isOpen ? (
-                    <ProductForm
-                        mode={mode}
-                        categories={categories}
-                        availableTags={availableTags}
-                        onSuccess={() => handleOpenChange(false)}
-                        action={action}
-                        initialValues={initialValues}
-                        submitLabel={submitLabel}
-                        successMessage={successMessage}
-                        productId={productId}
-                    />
+                    <ScrollArea
+                        className="min-h-0 flex-1"
+                        scrollBarClassName="w-3 p-1"
+                        scrollThumbClassName="bg-blue-500 hover:bg-blue-600"
+                    >
+                        <div className="px-6 pb-6 pt-4">
+                            <ProductForm
+                                mode={mode}
+                                categories={categories}
+                                availableTags={availableTags}
+                                onSuccess={() => handleOpenChange(false)}
+                                action={action}
+                                initialValues={initialValues}
+                                submitLabel={submitLabel}
+                                successMessage={successMessage}
+                                productId={productId}
+                            />
+                        </div>
+                    </ScrollArea>
                 ) : null}
             </DialogContent>
         </Dialog>
@@ -427,6 +572,7 @@ export function ProductEditDialog({
     categories,
     availableTags,
     product,
+    showTrigger = true,
     open,
     onOpenChange,
 }: ProductEditDialogProps & {
@@ -439,12 +585,14 @@ export function ProductEditDialog({
         imageUrl: product.imageUrl ?? "",
         category: product.category ?? "",
         tags: product.productTags.map((entry) => entry.tag.name),
+        sku: product.sku ?? "",
         price: centsToInputValue(product.priceCents),
         promotionalPrice: centsToInputValue(product.promotionalPriceCents),
         stockQuantity:
             typeof product.stockQuantity === "number"
                 ? String(product.stockQuantity)
                 : "",
+        reservedStockQuantity: String(product.reservedStockQuantity),
         productType: product.productType,
         subscriberDays:
             typeof product.subscriberDays === "number"
@@ -458,10 +606,11 @@ export function ProductEditDialog({
             categories={categories}
             availableTags={availableTags}
             trigger={
-                <Button size="sm" variant="outline">
-                    <Pencil className="h-4 w-4" />
-                    Editar
-                </Button>
+                showTrigger ? (
+                    <Button size="icon" variant="outline" aria-label="Editar produto">
+                        <Pencil className="h-4 w-4" />
+                    </Button>
+                ) : undefined
             }
             title={`Editar ${product.title}`}
             description="Atualize dados do produto, tags e preco promocional sem sair da listagem."

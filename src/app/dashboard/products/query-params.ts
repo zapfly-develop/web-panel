@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 export type ProductSortField =
     | "createdAt"
     | "title"
+    | "sku"
     | "category"
     | "price"
     | "stock"
@@ -18,6 +19,7 @@ export function parseProductSortField(
 ): ProductSortField {
     switch (value) {
         case "title":
+        case "sku":
         case "category":
         case "price":
         case "stock":
@@ -40,6 +42,8 @@ export function buildProductsOrderBy(
     switch (sortField) {
         case "title":
             return [{ title: sortDirection }, { createdAt: "desc" }];
+        case "sku":
+            return [{ sku: sortDirection }, { title: "asc" }];
         case "category":
             return [{ category: sortDirection }, { title: "asc" }];
         case "price":

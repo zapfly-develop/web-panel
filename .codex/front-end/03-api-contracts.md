@@ -95,7 +95,12 @@ Update order status:
 
 ```ts
 type UpdateOrderStatusDto = {
-  status: "PREPARING" | "SHIPPED" | "DELIVERED";
+  status:
+    | "PREPARING"
+    | "READY_FOR_SHIPPING"
+    | "READY_FOR_DELIVERY"
+    | "SHIPPED"
+    | "DELIVERED";
   notifyCustomer?: boolean;
   paymentHandledBy?: "RIDER" | "STORE_MACHINE";
 };
@@ -130,7 +135,9 @@ type UpsertStoreAddressDto = {
 };
 ```
 
-Resposta inclui `formattedAddress`, `latitude`, `longitude`, `geocodedAt`.
+Resposta inclui `formattedAddress`, `latitude`, `longitude`, `h3Index` e
+`geocodedAt`. `h3Index` e gerado pelo backend para logistica; nao recalcule no
+front.
 
 ## Delivery Merchant
 
@@ -173,7 +180,7 @@ type CreateDeliveryDto = {
 | POST | `/delivery/riders/register` | rider | `CreateRiderDto` |
 | POST | `/delivery/riders` | rider | alias para cadastro |
 | GET | `/delivery/riders/me` | rider | perfil + localizacao Redis |
-| GET | `/delivery/riders/me/analytics` | rider | `dateFrom`, `dateTo`, `groupBy`, `take` |
+| GET | `/delivery/riders/me/analytics` | rider | `dateFrom`, `dateTo`, `groupBy`, `take`, `hotzoneLimit` |
 | GET | `/delivery/riders/me/active-delivery` | rider | entrega ativa ou `null` |
 | GET | `/delivery/riders/me/available-deliveries` | rider | `radiusKm`, `limit` |
 | PATCH | `/delivery/riders/me/availability` | rider | `{ availabilityStatus }` |
@@ -184,6 +191,11 @@ type CreateDeliveryDto = {
 | POST | `/delivery/riders/me/deliveries/:deliveryId/client-absent` | rider | alias |
 | POST | `/delivery/riders/me/deliveries/:deliveryId/pick-up` | rider | sem body |
 | POST | `/delivery/riders/me/deliveries/:deliveryId/complete` | rider | sem body |
+
+`/delivery/riders/me/analytics` inclui `spatial.hotzones[]`, uma lista de
+hexagonos H3 ranqueados por volume, lucro do rider e lucro por minuto em rota.
+Use `boundary` para desenhar o poligono no mapa e `efficiencyScore` para
+intensidade visual.
 
 `availabilityStatus` aceita:
 
@@ -234,6 +246,16 @@ type RequestWithdrawalDto = {
 | GET | `/notifications/vapid-public-key` | publico | retorna `{ publicKey }` |
 | POST | `/notifications/push-subscriptions` | autenticado | browser subscription |
 | DELETE | `/notifications/push-subscriptions` | autenticado | `endpoint` query ou body |
+| POST | `/notifications/expo-push-tokens` | autenticado | token Expo nativo |
+| DELETE | `/notifications/expo-push-tokens` | autenticado | `token` query ou body |
+
+Observacoes atuais:
+
+- Clientes novos devem mandar `Authorization: Bearer <accessToken>`.
+- O controller usa `@CurrentUser()`. `x-user-id` e legado de borda, nao contrato
+  publico do NotificationModule.
+- Os endpoints `DELETE` aceitam query string ou body opcional.
+- Tokens ficam em `UserDeviceToken` com `type = WEB_PUSH` ou `type = EXPO`.
 
 Save subscription:
 
@@ -246,6 +268,34 @@ type SavePushSubscriptionDto = {
     auth: string;
   };
   userAgent?: string;
+};
+```
+
+Save Expo token:
+
+```ts
+type SaveExpoPushTokenDto = {
+  token: string; // ExponentPushToken[...]
+  platform?: "ios" | "android" | string;
+  deviceId?: string;
+};
+```
+
+Payload de push recebido pelo service worker:
+
+```ts
+type WebPushPayload = {
+  title: string;
+  body: string;
+  icon: string;
+  data: {
+    url: string;
+    deliveryId?: string;
+    orderId?: string;
+    status?: DeliveryStatus;
+    event?: string;
+    [key: string]: unknown;
+  };
 };
 ```
 
@@ -302,8 +352,10 @@ Webhooks externos:
 - `POST /integrations/webhooks/nuvemshop`
 - `POST /integrations/webhooks/olist`
 - `POST /integrations/webhooks/uappi`
+- `POST /integrations/webhooks/mercadolivre`
 
 O front nao deve chamar estes endpoints como usuario final. Uma tela futura de
 integracoes deve apenas mostrar status, URLs de webhook e configuracoes seguras
-vindas de endpoints administrativos ainda nao existentes.
-
+vindas de endpoints administrativos ainda nao existentes. Para Mercado Livre, o
+front nunca deve receber o `accessToken`; o backend resolve o lojista por
+`IntegrationConfig.externalUserId` a partir do `user_id` enviado no webhook.

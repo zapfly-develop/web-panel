@@ -29,6 +29,12 @@ function buildTagKey(value: string) {
     return normalizeTagName(value).toLocaleLowerCase("pt-BR");
 }
 
+const tagToneClasses = [
+    "border-blue-200 bg-blue-50 text-blue-700",
+    "border-sky-200 bg-sky-50 text-sky-700",
+    "border-indigo-200 bg-indigo-50 text-indigo-700",
+];
+
 export function ProductTagsInput({
     availableTags,
     value,
@@ -174,19 +180,22 @@ export function ProductTagsInput({
                 </PopoverContent>
             </Popover>
 
-            <div className="flex min-h-10 flex-wrap gap-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3">
+            <div className="flex min-h-10 flex-wrap gap-2 rounded-xl border border-dashed border-blue-200 bg-blue-50/40 px-3 py-3">
                 {value.length ? (
-                    value.map((tag) => (
+                    value.map((tag, index) => (
                         <Badge
                             key={buildTagKey(tag)}
-                            variant="secondary"
-                            className="gap-1.5 rounded-full px-3 py-1"
+                            variant="outline"
+                            className={cn(
+                                "gap-1.5 rounded-full px-3 py-1.5 shadow-sm",
+                                tagToneClasses[index % tagToneClasses.length],
+                            )}
                         >
                             <span>{tag}</span>
                             <button
                                 type="button"
                                 onClick={() => removeTag(tag)}
-                                className="rounded-full text-slate-500 transition hover:text-slate-900"
+                                className="rounded-full opacity-70 transition hover:opacity-100"
                                 aria-label={`Remover tag ${tag}`}
                             >
                                 <X className="h-3 w-3" />

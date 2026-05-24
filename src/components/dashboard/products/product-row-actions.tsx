@@ -2,13 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Prisma } from "@prisma/client";
-import {
-    MoreHorizontal,
-    Pencil,
-    Power,
-    Tags,
-    Trash2,
-} from "lucide-react";
+import { MoreHorizontal, Pencil, Power, Tags, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -54,7 +48,10 @@ export function ProductRowActions({
     const handleToggleStatus = () => {
         startTransition(async () => {
             try {
-                await toggleUserProductActiveAction(product.id, product.isActive);
+                await toggleUserProductActiveAction(
+                    product.id,
+                    product.isActive,
+                );
                 toast.success(
                     product.isActive
                         ? "Produto desativado com sucesso."
@@ -102,14 +99,7 @@ export function ProductRowActions({
                 product={product}
                 categories={categories}
                 availableTags={availableTags}
-            />
-            <ProductTagsDialog
-                open={tagsOpen}
-                onOpenChange={setTagsOpen}
-                productId={product.id}
-                productTitle={product.title}
-                currentTags={product.productTags.map((entry) => entry.tag.name)}
-                availableTags={availableTags}
+                showTrigger={false}
             />
 
             <DropdownMenu>
@@ -119,6 +109,7 @@ export function ProductRowActions({
                         variant="outline"
                         className="h-9 w-9"
                         disabled={isPending}
+                        aria-label="Abrir acoes do produto"
                     >
                         <MoreHorizontal className="h-4 w-4" />
                     </Button>
@@ -136,20 +127,13 @@ export function ProductRowActions({
                     <DropdownMenuItem
                         onSelect={(event) => {
                             event.preventDefault();
-                            setTagsOpen(true);
-                        }}
-                    >
-                        <Tags className="h-4 w-4" />
-                        Gerenciar tags
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                        onSelect={(event) => {
-                            event.preventDefault();
                             handleToggleStatus();
                         }}
                     >
                         <Power className="h-4 w-4" />
-                        {product.isActive ? "Desativar produto" : "Ativar produto"}
+                        {product.isActive
+                            ? "Desativar produto"
+                            : "Ativar produto"}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem

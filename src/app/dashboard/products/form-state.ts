@@ -6,9 +6,11 @@ export type ProductFormValues = {
     imageUrl: string;
     category: string;
     tags: string[];
+    sku: string;
     price: string;
     promotionalPrice: string;
     stockQuantity: string;
+    reservedStockQuantity: string;
     productType: ProductType;
     subscriberDays: string;
 };
@@ -22,6 +24,7 @@ export type ProductFormState = {
         imageUrl?: string;
         category?: string;
         tags?: string;
+        sku?: string;
         price?: string;
         promotionalPrice?: string;
         stockQuantity?: string;
@@ -37,9 +40,11 @@ export const initialProductFormValues: ProductFormValues = {
     imageUrl: "",
     category: "",
     tags: [],
+    sku: "",
     price: "",
     promotionalPrice: "",
     stockQuantity: "",
+    reservedStockQuantity: "0",
     productType: ProductType.ONE_TIME,
     subscriberDays: "",
 };

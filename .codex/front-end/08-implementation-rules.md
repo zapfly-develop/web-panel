@@ -94,6 +94,8 @@ Realtime/Push:
 
 - reconexao refaz fetch;
 - push abre deep link correto;
+- logout envia DELETE de push subscription com `{ endpoint }` no body ate o
+  backend aceitar body opcional;
 - logout remove ou pelo menos invalida subscription local.
 
 Admin:
@@ -145,4 +147,3 @@ Uma tela esta pronta quando:
 - foi testada em largura mobile e desktop quando web;
 - textos nao quebram dentro de botoes/cards;
 - o fluxo principal tem caminho de recuperacao para erro.
-

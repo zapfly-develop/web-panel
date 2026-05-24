@@ -11,11 +11,13 @@ Leia nesta ordem:
 3. `02-auth-roles-routing.md`: autenticacao, roles, protecao de rotas e tenants.
 4. `03-api-contracts.md`: endpoints, headers, payloads e erros.
 5. `04-business-flows.md`: fluxos de loja, rider, wallet, billing e delivery.
-6. `05-realtime-and-push.md`: Socket.IO, Web Push e eventos que movem UI.
+6. `05-realtime-and-push.md`: Socket.IO, push notifications e eventos que movem UI.
 7. `06-screen-map.md`: telas esperadas e responsabilidades por papel.
 8. `07-domain-types.md`: enums e tipos TypeScript base para o front.
 9. `08-implementation-rules.md`: checklist de implementacao e QA.
 10. `09-existing-frontends.md`: mapa dos front-ends existentes no workspace.
+11. `10-app-implementation-context.md`: plano de implantacao do futuro app.
+12. `11-notification-module-audit.md`: estado do NotificationModule e gaps.
 
 ## Principios
 
@@ -27,6 +29,8 @@ Leia nesta ordem:
 - Prefira `Authorization: Bearer <accessToken>` para clientes novos.
 - `x-user-id` e legado/conveniencia de borda. No browser, injete no servidor ou
   use JWT; nao confie em `x-user-id` montado pelo cliente.
+- Notificacoes suportam Web Push/PWA e Expo Push nativo via
+  `UserDeviceToken`; registre o canal correto por plataforma.
 - Para mudancas criticas, apos mutacao HTTP, atualize localmente e aceite eventos
   realtime como reconciliacao.
 

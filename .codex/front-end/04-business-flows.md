@@ -183,7 +183,7 @@ Regras:
 - Saque exige `idempotencyKey`; gere UUID por tentativa real do usuario.
 - Nao permita saque acima de `balanceCents` no front, mas backend e autoridade.
 
-## 10. Web Push
+## 10. Push Notifications
 
 Momento bom para pedir permissao:
 
@@ -196,11 +196,19 @@ Fluxo:
 1. `GET /notifications/vapid-public-key`.
 2. `registration.pushManager.subscribe(...)`.
 3. `POST /notifications/push-subscriptions`.
-4. Em logout, tente `DELETE /notifications/push-subscriptions`.
+4. Em logout, tente `DELETE /notifications/push-subscriptions` enviando
+   `endpoint` na query ou no body.
+
+Fluxo Expo nativo:
+
+1. Pedir permissao com `expo-notifications`.
+2. Obter `ExponentPushToken[...]`.
+3. `POST /notifications/expo-push-tokens`.
+4. Em logout, tente `DELETE /notifications/expo-push-tokens` enviando `token`
+   na query ou no body.
 
 Deep links:
 
 - Rider: `/delivery/available?deliveryId=<id>`
 - Loja: `/delivery/deliveries/<deliveryId>`
 - Cliente: `/delivery/tracking/<deliveryId>` quando existir experiencia cliente.
-

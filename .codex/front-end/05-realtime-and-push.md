@@ -180,13 +180,15 @@ Uso:
 - Nao assuma ordem perfeita entre HTTP e socket.
 - Se receber evento de entidade nao carregada, busque a lista/detalhe.
 
-## Web Push
+## Push: Web Push E Expo
 
 Endpoints:
 
 - `GET /notifications/vapid-public-key`
 - `POST /notifications/push-subscriptions`
 - `DELETE /notifications/push-subscriptions`
+- `POST /notifications/expo-push-tokens`
+- `DELETE /notifications/expo-push-tokens`
 
 Payload de subscription:
 
@@ -202,18 +204,51 @@ type PushSubscriptionPayload = {
 };
 ```
 
+Payload de token Expo:
+
+```ts
+type ExpoPushTokenPayload = {
+  token: string;
+  platform?: "ios" | "android" | string;
+  deviceId?: string;
+};
+```
+
 Service Worker:
 
 - precisa escutar `push`;
 - mostrar `title`, `body`, `icon`;
 - usar `data.url` para deep link no click.
+- deve tratar payload invalido com fallback seguro para `/delivery/rider` ou
+  `/dashboard/delivery`, conforme papel salvo na sessao.
 
 Deep links atuais:
 
 - `/delivery/available?deliveryId=<id>`
 - `/delivery/deliveries/<deliveryId>`
 - `/delivery/tracking/<deliveryId>` para cliente futuro.
+- `/delivery/active?deliveryId=<id>`
+- `/delivery/active`
+
+Mapeamento recomendado no front:
+
+- rider PWA/app: normalize `/delivery/available` e `/delivery/active` para a
+  tela operacional do rider, preservando `deliveryId`;
+- merchant web: normalize `/delivery/deliveries/<id>` para a tela de delivery da
+  loja ou detalhe/modal equivalente;
+- cliente final: nao publique `/delivery/tracking/<id>` sem um token/escopo
+  dedicado.
 
 Nao registre Push sem consentimento claro. Para rider, o melhor momento e ao
 ficar online; para merchant, ao habilitar monitoramento de delivery.
 
+## Diferenca Entre Canais
+
+- Web Push e browser/PWA: usa VAPID, Service Worker e Push API.
+- Expo Push e app nativo: usa `ExponentPushToken[...]` e `expo-notifications`.
+- O backend persiste ambos em `UserDeviceToken`, diferenciando `WEB_PUSH` e
+  `EXPO`.
+- O backend ainda retorna `publicKey: null` quando VAPID nao esta configurado; o
+  front deve esconder o CTA de Web Push neste caso.
+- Expo Push continua podendo funcionar sem VAPID, desde que o app registre um
+  token nativo.

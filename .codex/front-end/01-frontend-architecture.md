@@ -116,9 +116,22 @@ O front e responsavel por:
 - converter VAPID key para `Uint8Array`;
 - criar `PushSubscription`;
 - chamar `POST /notifications/push-subscriptions`;
-- remover subscription com `DELETE /notifications/push-subscriptions`.
+- remover subscription com `DELETE /notifications/push-subscriptions`, enviando
+  `endpoint` na query ou no body.
 
 O backend envia push e limpa endpoints expirados.
+
+## Expo Push
+
+O app nativo e responsavel por:
+
+- pedir permissao com `expo-notifications`;
+- obter `ExponentPushToken[...]`;
+- chamar `POST /notifications/expo-push-tokens`;
+- remover token no logout com `DELETE /notifications/expo-push-tokens`.
+
+O backend persiste Web Push e Expo Push em `UserDeviceToken`; o front so escolhe
+o endpoint certo para a plataforma.
 
 ## Google Maps
 
@@ -150,4 +163,3 @@ Na UI:
 - para `403`, mostre acesso negado e volte ao home correto do papel;
 - para `409`, mostre conflito de estado e refaca fetch;
 - para `400`, destaque campos quando a mensagem permitir.
-
