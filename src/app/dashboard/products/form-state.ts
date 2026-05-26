@@ -18,6 +18,12 @@ export type ProductFormValues = {
 export type ProductFormState = {
     status: "idle" | "success" | "error";
     formError: string | null;
+    savedProduct?: {
+        id: string;
+        title: string;
+        sku: string | null;
+        stockQuantity: number | null;
+    };
     fieldErrors: {
         title?: string;
         description?: string;

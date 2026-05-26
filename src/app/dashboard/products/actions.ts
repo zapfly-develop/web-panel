@@ -373,7 +373,7 @@ export async function createUserProductAction(
 
     const { payload } = prepared;
 
-    await prisma.product.create({
+    const product = await prisma.product.create({
         data: {
             ...buildProductData(user.id, payload),
             productTags: payload.tags.length
@@ -388,12 +388,19 @@ export async function createUserProductAction(
     });
 
     revalidatePath("/dashboard/products");
+    revalidatePath("/dashboard/inbound");
 
     return {
         status: "success",
         formError: null,
         fieldErrors: {},
         values: initialProductFormState.values,
+        savedProduct: {
+            id: product.id,
+            title: product.title,
+            sku: product.sku,
+            stockQuantity: product.stockQuantity,
+        },
     };
 }
 

@@ -11,12 +11,13 @@ export type ProductSortField =
 
 export type SortDirection = "asc" | "desc";
 
+export type ProductTabFilter = "all" | "active" | "inactive";
+
 export const DEFAULT_PRODUCT_SORT_FIELD: ProductSortField = "createdAt";
 export const DEFAULT_PRODUCT_SORT_DIRECTION: SortDirection = "desc";
+export const DEFAULT_PRODUCT_TAB: ProductTabFilter = "all";
 
-export function parseProductSortField(
-    value?: string,
-): ProductSortField {
+export function parseProductSortField(value?: string): ProductSortField {
     switch (value) {
         case "title":
         case "sku":
@@ -33,6 +34,11 @@ export function parseProductSortField(
 
 export function parseSortDirection(value?: string): SortDirection {
     return value === "asc" ? "asc" : "desc";
+}
+
+export function parseProductTab(value?: string): ProductTabFilter {
+    if (value === "active" || value === "inactive") return value;
+    return DEFAULT_PRODUCT_TAB;
 }
 
 export function buildProductsOrderBy(
@@ -63,6 +69,7 @@ export function buildProductsPageHref(input: {
     query?: string;
     sortField?: ProductSortField;
     sortDirection?: SortDirection;
+    tab?: ProductTabFilter;
 }): string {
     const params = new URLSearchParams();
 
@@ -85,8 +92,11 @@ export function buildProductsPageHref(input: {
         params.set("dir", input.sortDirection);
     }
 
-    const queryString = params.toString();
+    if (input.tab && input.tab !== DEFAULT_PRODUCT_TAB) {
+        params.set("tab", input.tab);
+    }
 
+    const queryString = params.toString();
     return queryString
         ? `/dashboard/products?${queryString}`
         : "/dashboard/products";

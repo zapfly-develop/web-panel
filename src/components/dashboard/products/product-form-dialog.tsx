@@ -72,6 +72,7 @@ type ProductDialogProps = ProductDialogBaseProps & {
     productId?: string;
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
+    onSuccess?: (state: ProductFormState) => void;
 };
 
 type ProductEditDialogProps = ProductDialogBaseProps & {
@@ -117,7 +118,7 @@ function ProductForm({
     productId,
 }: ProductDialogBaseProps & {
     mode: ProductDialogMode;
-    onSuccess: () => void;
+    onSuccess: (state: ProductFormState) => void;
     action: ProductFormAction;
     initialValues: ProductFormValues;
     submitLabel: string;
@@ -142,8 +143,8 @@ function ProductForm({
         }
 
         toast.success(successMessage);
-        onSuccess();
-    }, [onSuccess, state.status, successMessage]);
+        onSuccess(state);
+    }, [onSuccess, state, state.status, successMessage]);
 
     return (
         <form action={submitAction} className="grid gap-6">
@@ -475,6 +476,7 @@ function ProductDialog({
     productId,
     open,
     onOpenChange,
+    onSuccess,
     categories,
     availableTags,
 }: ProductDialogProps) {
@@ -521,7 +523,10 @@ function ProductDialog({
                                 mode={mode}
                                 categories={categories}
                                 availableTags={availableTags}
-                                onSuccess={() => handleOpenChange(false)}
+                                onSuccess={(state) => {
+                                    onSuccess?.(state);
+                                    handleOpenChange(false);
+                                }}
                                 action={action}
                                 initialValues={initialValues}
                                 submitLabel={submitLabel}
@@ -539,11 +544,17 @@ function ProductDialog({
 export function ProductFormDialog({
     categories,
     availableTags,
+    initialValues = initialProductFormValues,
+    showTrigger = true,
     open,
     onOpenChange,
+    onSuccess,
 }: ProductDialogBaseProps & {
+    initialValues?: ProductFormValues;
+    showTrigger?: boolean;
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
+    onSuccess?: (state: ProductFormState) => void;
 }) {
     return (
         <ProductDialog
@@ -551,19 +562,22 @@ export function ProductFormDialog({
             categories={categories}
             availableTags={availableTags}
             trigger={
-                <Button className="gap-2">
-                    <PackagePlus className="h-4 w-4" />
-                    Novo produto
-                </Button>
+                showTrigger ? (
+                    <Button className="gap-2">
+                        <PackagePlus className="h-4 w-4" />
+                        Novo produto
+                    </Button>
+                ) : undefined
             }
             title="Novo produto"
             description="Cadastre itens da loja com categoria, tags e preco promocional para o delivery no WhatsApp."
             submitLabel="Salvar produto"
             successMessage="Produto cadastrado com sucesso."
             action={createUserProductAction}
-            initialValues={initialProductFormValues}
+            initialValues={initialValues}
             open={open}
             onOpenChange={onOpenChange}
+            onSuccess={onSuccess}
         />
     );
 }

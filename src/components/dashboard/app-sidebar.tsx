@@ -2,20 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ComponentType, SVGProps } from "react";
 import {
     Bike,
     Bot,
-    Boxes,
     ChevronRight,
     LayoutDashboard,
     LogOut,
     MessageCircle,
     MessageSquare,
+    Package2,
     Plus,
     Route,
     Settings,
     ShoppingBag,
     Store,
+    Truck,
     Users,
     WalletCards,
 } from "lucide-react";
@@ -28,6 +30,12 @@ import {
     SidebarRail,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+
+type SidebarNavItem = {
+    title: string;
+    url: string;
+    icon: ComponentType<SVGProps<SVGSVGElement>>;
+};
 
 const mainMenuItems = [
     {
@@ -57,12 +65,20 @@ const mainMenuItems = [
     },
 ];
 
-const operationItems = [
+const logisticsItems = [
     {
-        title: "Produtos",
-        url: "/dashboard/products",
-        icon: Boxes,
+        title: "Inbound",
+        url: "/dashboard/inbound",
+        icon: Truck,
     },
+    {
+        title: "Estoque",
+        url: "/dashboard/products",
+        icon: Package2,
+    },
+];
+
+const operationItems = [
     {
         title: "Clientes",
         url: "/dashboard/customers",
@@ -123,7 +139,7 @@ function SidebarLink({
     item,
     pathname,
 }: {
-    item: (typeof mainMenuItems)[number] | (typeof operationItems)[number];
+    item: SidebarNavItem;
     pathname: string;
 }) {
     const isActive = isRouteActive(pathname, item.url);
@@ -193,6 +209,21 @@ export function AppSidebar() {
                         </p>
                         <div className="space-y-1.5">
                             {mainMenuItems.map((item) => (
+                                <SidebarLink
+                                    key={item.title}
+                                    item={item}
+                                    pathname={pathname}
+                                />
+                            ))}
+                        </div>
+                    </section>
+
+                    <section className="space-y-2 group-data-[collapsible=icon]:hidden">
+                        <p className="px-3 text-[10px] font-bold uppercase tracking-[0.28em] text-slate-400">
+                            Operações Logísticas
+                        </p>
+                        <div className="space-y-1.5">
+                            {logisticsItems.map((item) => (
                                 <SidebarLink
                                     key={item.title}
                                     item={item}

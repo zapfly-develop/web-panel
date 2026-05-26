@@ -139,6 +139,22 @@ async function buildNestHeaders(headersInit?: HeadersInit): Promise<Headers> {
     return headers;
 }
 
+export async function buildAuthenticatedNestHeaders(
+    userId: string,
+    headersInit?: HeadersInit,
+): Promise<Headers> {
+    const headers = new Headers(headersInit);
+    const token = await createInternalNestJwt(userId);
+
+    if (token) {
+        headers.set("Authorization", `Bearer ${token}`);
+    } else if (!headers.has("Authorization")) {
+        headers.set("x-user-id", userId);
+    }
+
+    return headers;
+}
+
 export async function fetchNestApiJson<T>(
     path: string,
     options: NestApiOptions = {},
