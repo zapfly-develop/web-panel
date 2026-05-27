@@ -9,6 +9,7 @@ import {
     Loader2,
     PackagePlus,
     Pencil,
+    RefreshCw,
     Tags,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -33,6 +34,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
     createUserProductAction,
@@ -130,11 +132,18 @@ function ProductForm({
     );
     const [category, setCategory] = useState(initialValues.category);
     const [tags, setTags] = useState<string[]>(initialValues.tags);
+    const [syncToChannels, setSyncToChannels] = useState(
+        initialValues.syncToChannels,
+    );
     const [state, submitAction, isPending] = useActionState(
         action,
-        initialProductFormState,
+        {
+            ...initialProductFormState,
+            values: initialValues,
+        },
     );
-    const reservedStockQuantity = Number(initialValues.reservedStockQuantity) || 0;
+    const formValues = state.status === "error" ? state.values : initialValues;
+    const reservedStockQuantity = Number(formValues.reservedStockQuantity) || 0;
     const hasReservedStock = mode === "edit" && reservedStockQuantity > 0;
 
     useEffect(() => {
@@ -149,6 +158,11 @@ function ProductForm({
     return (
         <form action={submitAction} className="grid gap-6">
             {productId ? <input type="hidden" name="productId" value={productId} /> : null}
+            <input
+                type="hidden"
+                name="syncToChannels"
+                value={syncToChannels ? "true" : "false"}
+            />
 
             {state.formError && state.status === "error" && (
                 <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -168,7 +182,7 @@ function ProductForm({
                         id={`${mode}-title`}
                         name="title"
                         placeholder="Ex.: Coca-Cola 2L"
-                        defaultValue={initialValues.title}
+                        defaultValue={formValues.title}
                         required
                     />
                     {state.fieldErrors.title && (
@@ -185,7 +199,7 @@ function ProductForm({
                         name="description"
                         rows={3}
                         placeholder="Detalhes que ajudam o cliente e a IA a vender melhor."
-                        defaultValue={initialValues.description}
+                        defaultValue={formValues.description}
                     />
                     {state.fieldErrors.description && (
                         <p className="text-sm text-destructive">
@@ -238,7 +252,7 @@ function ProductForm({
                         min="0.01"
                         step="0.01"
                         placeholder="0,00"
-                        defaultValue={initialValues.price}
+                        defaultValue={formValues.price}
                         required
                     />
                     {state.fieldErrors.price && (
@@ -259,7 +273,7 @@ function ProductForm({
                         min="0.01"
                         step="0.01"
                         placeholder="Opcional"
-                        defaultValue={initialValues.promotionalPrice}
+                        defaultValue={formValues.promotionalPrice}
                     />
                     <p className="text-xs text-muted-foreground">
                         Se informado, sera o preco usado no delivery e nas
@@ -284,7 +298,7 @@ function ProductForm({
                             min="1"
                             step="1"
                             placeholder="Quantidade de dias"
-                            defaultValue={initialValues.subscriberDays}
+                            defaultValue={formValues.subscriberDays}
                         />
                         {state.fieldErrors.subscriberDays && (
                             <p className="text-sm text-destructive">
@@ -302,7 +316,7 @@ function ProductForm({
 
                 <ProductImageDropzone
                     name="imageUrl"
-                    initialValue={initialValues.imageUrl}
+                    initialValue={formValues.imageUrl}
                     error={state.fieldErrors.imageUrl}
                 />
             </section>
@@ -363,7 +377,7 @@ function ProductForm({
                         id={`${mode}-sku`}
                         name="sku"
                         placeholder="Ex.: BEB-COCA-2L"
-                        defaultValue={initialValues.sku}
+                        defaultValue={formValues.sku}
                         required
                     />
                     {state.fieldErrors.sku && (
@@ -388,7 +402,7 @@ function ProductForm({
                         min="0"
                         step="1"
                         placeholder="Deixe vazio para estoque livre"
-                        defaultValue={initialValues.stockQuantity}
+                        defaultValue={formValues.stockQuantity}
                     />
                     {state.fieldErrors.stockQuantity && (
                         <p className="text-sm text-destructive">
@@ -419,7 +433,7 @@ function ProductForm({
                         <Input
                             id={`${mode}-reservedStockQuantity`}
                             name="reservedStockQuantity"
-                            value={initialValues.reservedStockQuantity}
+                            value={formValues.reservedStockQuantity}
                             readOnly
                             aria-readonly="true"
                             className="bg-white/70 font-medium text-slate-700"
@@ -436,6 +450,33 @@ function ProductForm({
                         )}
                     </div>
                 )}
+
+                <div className="flex items-start justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3">
+                    <div className="grid gap-1">
+                        <Label
+                            htmlFor={`${mode}-syncToChannels`}
+                            className="flex items-center gap-2 text-blue-700"
+                        >
+                            <RefreshCw className="h-4 w-4" />
+                            Salvar e sincronizar canais
+                        </Label>
+                        <p className="max-w-xl text-xs text-muted-foreground">
+                            Enfileira apenas os canais elegiveis para publicacao.
+                        </p>
+                        {state.fieldErrors.syncToChannels && (
+                            <p className="text-sm text-destructive">
+                                {state.fieldErrors.syncToChannels}
+                            </p>
+                        )}
+                    </div>
+                    <Switch
+                        id={`${mode}-syncToChannels`}
+                        checked={syncToChannels}
+                        onCheckedChange={setSyncToChannels}
+                        disabled={isPending}
+                        className="data-[state=checked]:bg-blue-600"
+                    />
+                </div>
             </section>
             </div>
 
@@ -612,6 +653,7 @@ export function ProductEditDialog({
             typeof product.subscriberDays === "number"
                 ? String(product.subscriberDays)
                 : "",
+        syncToChannels: false,
     };
 
     return (

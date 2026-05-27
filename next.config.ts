@@ -15,6 +15,9 @@ const nextConfig: NextConfig = {
             {
                 hostname: "i0.wp.com",
             },
+            {
+                hostname: "delivery.newwealth.online",
+            },
         ],
     },
     output: "standalone",

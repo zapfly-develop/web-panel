@@ -13,6 +13,7 @@ export type ProductFormValues = {
     reservedStockQuantity: string;
     productType: ProductType;
     subscriberDays: string;
+    syncToChannels: boolean;
 };
 
 export type ProductFormState = {
@@ -36,6 +37,7 @@ export type ProductFormState = {
         stockQuantity?: string;
         productType?: string;
         subscriberDays?: string;
+        syncToChannels?: string;
     };
     values: ProductFormValues;
 };
@@ -53,6 +55,7 @@ export const initialProductFormValues: ProductFormValues = {
     reservedStockQuantity: "0",
     productType: ProductType.ONE_TIME,
     subscriberDays: "",
+    syncToChannels: false,
 };
 
 export const initialProductFormState: ProductFormState = {
