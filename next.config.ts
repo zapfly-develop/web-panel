@@ -8,7 +8,18 @@ const nextConfig: NextConfig = {
         "migration-springer-klein-perl.trycloudflare.com",
         "delivery.aliancaonline.site",
         "delivery.newwealth.online",
+        "i0.wp.com",
     ],
+    images: {
+        remotePatterns: [
+            {
+                hostname: "i0.wp.com",
+            },
+            {
+                hostname: "delivery.newwealth.online",
+            },
+        ],
+    },
     output: "standalone",
 };
 

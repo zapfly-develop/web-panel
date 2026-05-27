@@ -37,8 +37,9 @@ legado interno; novas features de dominio devem preferir a API Nest.
 - Auth: login, refresh token, logout, role efetiva e status de acesso.
 - Merchant dashboard: WhatsApp, billing, pedidos, entregas, store address e mapa.
 - Rider: onboarding, disponibilidade, localizacao, corridas, incidentes, carteira.
+- WMS/logistics: packing, dispatch, DeliveryRun, clusterizacao e expedicao.
 - Admin: metricas, usuarios, acesso, monitoramento financeiro e instancias.
-- Notifications: Web Push com VAPID, subscriptions por usuario.
+- Notifications: Web Push com VAPID e Expo Push nativo via `UserDeviceToken`.
 - Realtime: namespaces `/orders`, `/delivery` e `/whatsapp-events`.
 - Integrations: webhooks Tray/Nuvemshop/Olist/Uappi. Atualmente e mais backend,
   mas qualquer tela futura deve tratar segredos e credenciais apenas no servidor.
@@ -83,6 +84,9 @@ Rider app:
 - Riders nao devem acessar dashboard, billing, admin ou APIs de loja.
 - Wallet do rider ja tem API e UI no front.
 - Store address geocodificado e base para distancia/preco de delivery.
+- Delivery usa H3 no backend para clusterizacao e matchmaking quente, mas o
+  front deve tratar `h3Index` como metadado de diagnostico, nao como regra.
 - Integrations seguem Strategy Pattern: adapter traduz payload externo para
-  `FlooviOrder`; `IntegrationsService` persiste pedido.
-
+  `FlooviOrder`; `IntegrationsService` persiste pedido. Mercado Livre usa
+  webhook indireto: `resource` + `user_id` resolvem credencial interna antes da
+  traducao.

@@ -15,6 +15,7 @@ import {
     RiderAvailabilityStatus,
     RiderStatus,
     RiderVehicleType,
+    StorageLocationType,
     SubscriptionStatus,
     UserRole,
 } from "@prisma/client";
@@ -726,6 +727,142 @@ async function seedGuaimbeDeliveryProducts(ownerUserId) {
     return products;
 }
 
+const WMS_INBOUND_PRODUCTS = [
+    {
+        id: "seed-wms-prod-cafe-500g",
+        title: "Cafe Especial 500g",
+        description: "Cafe torrado e moido para reposicao por NF-e.",
+        sku: "WMS-CAFE-500G",
+        category: "Mercearia",
+        priceCents: 2490,
+        stockQuantity: 18,
+    },
+    {
+        id: "seed-wms-prod-acucar-1kg",
+        title: "Acucar Cristal 1kg",
+        description: "Acucar cristal para venda avulsa no catalogo.",
+        sku: "WMS-ACUCAR-1KG",
+        category: "Mercearia",
+        priceCents: 690,
+        stockQuantity: 42,
+    },
+    {
+        id: "seed-wms-prod-azeite-500ml",
+        title: "Azeite Extra Virgem 500ml",
+        description: "Azeite extra virgem importado para controle WMS.",
+        sku: "WMS-AZEITE-500ML",
+        category: "Mercearia premium",
+        priceCents: 4290,
+        stockQuantity: 7,
+    },
+    {
+        id: "seed-wms-prod-biscoito-chocolate",
+        title: "Biscoito Recheado Chocolate",
+        description: "Biscoito recheado para testar item sem codigo identico.",
+        sku: "WMS-BISCOITO-CHOC",
+        category: "Doces",
+        priceCents: 590,
+        stockQuantity: 30,
+    },
+];
+
+async function seedWmsInboundScenario(ownerUserId) {
+    const warehouse = await prisma.warehouse.upsert({
+        where: { id: "seed-wms-warehouse-main" },
+        update: {
+            ownerUserId,
+            name: "Galpao Principal",
+        },
+        create: {
+            id: "seed-wms-warehouse-main",
+            ownerUserId,
+            name: "Galpao Principal",
+        },
+    });
+
+    await prisma.storageLocation.upsert({
+        where: { id: "seed-wms-location-receiving" },
+        update: {
+            warehouseId: warehouse.id,
+            aisle: "DOC",
+            shelf: "01",
+            bin: "RECEB",
+            code: "DOC-01-RECEB",
+            type: StorageLocationType.RECEIVING,
+        },
+        create: {
+            id: "seed-wms-location-receiving",
+            warehouseId: warehouse.id,
+            aisle: "DOC",
+            shelf: "01",
+            bin: "RECEB",
+            code: "DOC-01-RECEB",
+            type: StorageLocationType.RECEIVING,
+        },
+    });
+
+    await prisma.storageLocation.upsert({
+        where: { id: "seed-wms-location-a-01-01" },
+        update: {
+            warehouseId: warehouse.id,
+            aisle: "A",
+            shelf: "01",
+            bin: "01",
+            code: "A-01-01",
+            type: StorageLocationType.PICKING,
+        },
+        create: {
+            id: "seed-wms-location-a-01-01",
+            warehouseId: warehouse.id,
+            aisle: "A",
+            shelf: "01",
+            bin: "01",
+            code: "A-01-01",
+            type: StorageLocationType.PICKING,
+        },
+    });
+
+    const products = [];
+
+    for (const productSeed of WMS_INBOUND_PRODUCTS) {
+        const product = await prisma.product.upsert({
+            where: { id: productSeed.id },
+            update: {
+                ownerUserId,
+                title: productSeed.title,
+                description: productSeed.description,
+                sku: productSeed.sku,
+                category: productSeed.category,
+                priceCents: productSeed.priceCents,
+                stockQuantity: productSeed.stockQuantity,
+                reservedStockQuantity: 0,
+                productType: ProductType.ONE_TIME,
+                isActive: true,
+            },
+            create: {
+                id: productSeed.id,
+                ownerUserId,
+                title: productSeed.title,
+                description: productSeed.description,
+                sku: productSeed.sku,
+                category: productSeed.category,
+                priceCents: productSeed.priceCents,
+                stockQuantity: productSeed.stockQuantity,
+                reservedStockQuantity: 0,
+                productType: ProductType.ONE_TIME,
+                isActive: true,
+            },
+        });
+
+        products.push(product);
+    }
+
+    return {
+        warehouse,
+        productIds: products.map((product) => product.id),
+    };
+}
+
 async function seedGuaimbeRiderLocations(riderRecords) {
     const now = new Date();
     const locationOffsets = [
@@ -1057,6 +1194,7 @@ async function main() {
     await seedTransaction(paidCustomer.id);
     const riders = await seedRiders(paidCustomer.id);
     const marketplaceRiders = await seedMarketplaceRiders();
+    const wmsInboundScenario = await seedWmsInboundScenario(paidCustomer.id);
     const deliveryScenario = await seedGuaimbeDeliveryScenario(paidCustomer.id, [
         ...riders,
         ...marketplaceRiders,
@@ -1071,6 +1209,12 @@ async function main() {
     console.log("Paid customer:");
     console.log("  email: pro@coinrise.local");
     console.log("  password: pro123");
+    console.log("WMS inbound scenario:");
+    console.log(`  warehouseId: ${wmsInboundScenario.warehouse.id}`);
+    console.log(
+        `  productIds: ${wmsInboundScenario.productIds.join(", ")}`,
+    );
+    console.log("  sample XML: inspirations/inbound/nfe-wms-test.xml");
     console.log("Store-owned riders:");
     riders.forEach(({ user, rider, password }) => {
         console.log(`  ${user.name}:`);

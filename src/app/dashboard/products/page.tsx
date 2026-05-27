@@ -1,344 +1,387 @@
 import { auth } from "@/auth";
-import { Prisma, ProductType } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
+import {
+  AlertTriangle,
+  Boxes,
+  Package2,
+  ShoppingBag,
+  Warehouse,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProductFormDialog } from "@/components/dashboard/products/product-form-dialog";
 import { ProductsDataTable } from "@/components/dashboard/products/products-data-table";
-import { ProductsToolbar } from "@/components/dashboard/products/products-toolbar";
+import { fetchNestApiJson } from "@/lib/nest-api";
 import {
-    Layers3,
-    Package2,
-    ShoppingBag,
-    Sparkles,
-    Warehouse,
-} from "lucide-react";
-import {
-    buildProductsOrderBy,
-    buildProductsPageHref,
-    parseProductSortField,
-    parseSortDirection,
+  buildProductsOrderBy,
+  buildProductsPageHref,
+  parseProductSortField,
+  parseProductTab,
+  parseSortDirection,
+  ProductTabFilter,
 } from "./query-params";
+import {
+  ProductSyncStatusByProductId,
+  ProductSyncStatusResponse,
+} from "./sync-status";
 
 type SearchParams = Promise<{
-    page?: string;
-    q?: string;
-    sort?: string;
-    dir?: string;
+  page?: string;
+  q?: string;
+  sort?: string;
+  dir?: string;
+  tab?: string;
 }>;
 
 const PAGE_SIZE = 10;
 
-type ProductRow = Prisma.ProductGetPayload<{
-    include: {
-        productTags: {
-            include: {
-                tag: true;
-            };
-        };
-    };
-}>;
-
 function parsePage(value?: string) {
-    const parsed = Number(value);
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) return 1;
+  return parsed;
+}
 
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-        return 1;
-    }
+function buildTabWhere(
+  base: Prisma.ProductWhereInput,
+  tab: ProductTabFilter,
+): Prisma.ProductWhereInput {
+  if (tab === "active") return { ...base, isActive: true };
+  if (tab === "inactive") return { ...base, isActive: false };
+  return base;
+}
 
-    return parsed;
+async function loadProductSyncStatuses(
+  productIds: string[],
+  userId: string,
+): Promise<ProductSyncStatusByProductId> {
+  if (!productIds.length) {
+    return {};
+  }
+
+  const entries = await Promise.all(
+    productIds.map(async (productId) => {
+      try {
+        const status = await fetchNestApiJson<ProductSyncStatusResponse>(
+          `/wms/products/${productId}/sync-status`,
+          {
+            headers: {
+              "x-user-id": userId,
+            },
+          },
+        );
+
+        return [productId, status] as const;
+      } catch (error) {
+        console.warn("Nao foi possivel carregar status de canais do produto.", {
+          productId,
+          error,
+        });
+        return [productId, null] as const;
+      }
+    }),
+  );
+
+  return entries.reduce<ProductSyncStatusByProductId>(
+    (acc, [productId, status]) => {
+      if (status) {
+        acc[productId] = status;
+      }
+
+      return acc;
+    },
+    {},
+  );
 }
 
 export default async function UserProductsPage({
-    searchParams,
+  searchParams,
 }: {
-    searchParams: SearchParams;
+  searchParams: SearchParams;
 }) {
-    const session = await auth();
+  const session = await auth();
 
-    if (!session?.user?.id) {
-        redirect("/login");
-    }
+  if (!session?.user?.id) {
+    redirect("/login");
+  }
 
-    const params = await searchParams;
-    const userId = session.user.id;
-    const currentPage = parsePage(params.page);
-    const skip = (currentPage - 1) * PAGE_SIZE;
-    const searchQuery = params.q?.trim() || "";
-    const sortField = parseProductSortField(params.sort);
-    const sortDirection = parseSortDirection(params.dir);
+  const params = await searchParams;
+  const userId = session.user.id;
+  const currentPage = parsePage(params.page);
+  const skip = (currentPage - 1) * PAGE_SIZE;
+  const searchQuery = params.q?.trim() || "";
+  const sortField = parseProductSortField(params.sort);
+  const sortDirection = parseSortDirection(params.dir);
+  const activeTab = parseProductTab(params.tab);
 
-    const baseWhere = {
-        ownerUserId: userId,
-    } as const;
-    const productTableWhere: Prisma.ProductWhereInput = searchQuery
-        ? {
-              ...baseWhere,
-              OR: [
-                  {
-                      title: {
-                          contains: searchQuery,
-                          mode: Prisma.QueryMode.insensitive,
-                      },
+  const baseWhere: Prisma.ProductWhereInput = { ownerUserId: userId };
+
+  const searchWhere: Prisma.ProductWhereInput = searchQuery
+    ? {
+        OR: [
+          {
+            title: {
+              contains: searchQuery,
+              mode: Prisma.QueryMode.insensitive,
+            },
+          },
+          {
+            description: {
+              contains: searchQuery,
+              mode: Prisma.QueryMode.insensitive,
+            },
+          },
+          {
+            category: {
+              contains: searchQuery,
+              mode: Prisma.QueryMode.insensitive,
+            },
+          },
+          {
+            productTags: {
+              some: {
+                tag: {
+                  name: {
+                    contains: searchQuery,
+                    mode: Prisma.QueryMode.insensitive,
                   },
-                  {
-                      description: {
-                          contains: searchQuery,
-                          mode: Prisma.QueryMode.insensitive,
-                      },
-                  },
-                  {
-                      category: {
-                          contains: searchQuery,
-                          mode: Prisma.QueryMode.insensitive,
-                      },
-                  },
-                  {
-                      productTags: {
-                          some: {
-                              tag: {
-                                  name: {
-                                      contains: searchQuery,
-                                      mode: Prisma.QueryMode.insensitive,
-                                  },
-                              },
-                          },
-                      },
-                  },
-              ],
-          }
-        : baseWhere;
-
-    const [
-        products,
-        filteredTotalProducts,
-        totalCatalogProducts,
-        deliveryProductsCount,
-        subscriptionProductsCount,
-        lowStockCount,
-        categoryRows,
-        tagRows,
-    ] = await Promise.all([
-        prisma.product.findMany({
-            where: productTableWhere,
-            include: {
-                productTags: {
-                    include: {
-                        tag: true,
-                    },
                 },
+              },
             },
-            orderBy: buildProductsOrderBy(sortField, sortDirection),
-            skip,
-            take: PAGE_SIZE,
-        }),
-        prisma.product.count({ where: productTableWhere }),
-        prisma.product.count({ where: baseWhere }),
-        prisma.product.count({
-            where: {
-                ...baseWhere,
-                productType: ProductType.ONE_TIME,
-            },
-        }),
-        prisma.product.count({
-            where: {
-                ...baseWhere,
-                productType: ProductType.SUBSCRIPTION,
-            },
-        }),
-        prisma.product.count({
-            where: {
-                ...baseWhere,
-                stockQuantity: {
-                    not: null,
-                    lte: 5,
-                },
-            },
-        }),
-        prisma.product.findMany({
-            where: {
-                ...baseWhere,
-                category: {
-                    not: null,
-                },
-            },
-            select: {
-                category: true,
-            },
-            distinct: ["category"],
-            orderBy: {
-                category: "asc",
-            },
-        }),
-        prisma.tag.findMany({
-            where: {
-                subscriberId: userId,
-            },
-            select: {
-                id: true,
-                name: true,
-                _count: {
-                    select: {
-                        productTags: true,
-                    },
-                },
-            },
-            orderBy: {
-                name: "asc",
-            },
-        }),
-    ]);
+          },
+        ],
+      }
+    : {};
 
-    const totalPages = Math.max(1, Math.ceil(filteredTotalProducts / PAGE_SIZE));
+  const tableWhere: Prisma.ProductWhereInput = buildTabWhere(
+    { ...baseWhere, ...searchWhere },
+    activeTab,
+  );
 
-    if (filteredTotalProducts > 0 && currentPage > totalPages) {
-        redirect(
-            buildProductsPageHref({
-                page: totalPages,
-                query: searchQuery,
-                sortField,
-                sortDirection,
-            }),
-        );
-    }
-    const productRows = products as ProductRow[];
-    const categories = categoryRows
-        .map((row) => row.category?.trim() || "")
-        .filter(Boolean);
-    const availableTags = tagRows.map((tag) => ({
-        id: tag.id,
-        name: tag.name,
-        productCount: tag._count.productTags,
-    }));
+  // ─── Todas as queries em paralelo — latência = max(query mais lenta) ────
+  const [
+    products,
+    filteredTotal,
+    totalActive,
+    totalInactive,
+    totalCatalog,
+    outOfStockCount,
+    stockAggregations,
+    categoryRows,
+    tagRows,
+  ] = await Promise.all([
+    // Página atual da tabela
+    prisma.product.findMany({
+      where: tableWhere,
+      include: { productTags: { include: { tag: true } } },
+      orderBy: buildProductsOrderBy(sortField, sortDirection),
+      skip,
+      take: PAGE_SIZE,
+    }),
 
-    return (
-        <div className="space-y-8">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div className="space-y-2">
-                    <h2 className="flex items-center gap-3 text-3xl font-bold tracking-tight text-slate-900">
-                        <ShoppingBag className="h-8 w-8 text-primary" />
-                        Catalogo da loja
-                    </h2>
-                    <p className="max-w-3xl text-slate-500">
-                        Gerencie o catalogo do cliente em formato de tabela, com
-                        categorias, imagens e paginação para carregar apenas o
-                        necessario por vez.
-                    </p>
-                </div>
+    // Total filtrado (busca + tab) — para paginação
+    prisma.product.count({ where: tableWhere }),
 
-                <ProductFormDialog
-                    categories={categories}
-                    availableTags={availableTags}
-                />
-            </div>
+    // Contagens das abas — sem filtro de tab, com filtro de busca
+    prisma.product.count({
+      where: { ...baseWhere, ...searchWhere, isActive: true },
+    }),
+    prisma.product.count({
+      where: { ...baseWhere, ...searchWhere, isActive: false },
+    }),
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <Card className="border-none shadow-sm">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="flex items-center gap-2 text-sm text-slate-500">
-                            <Package2 className="h-4 w-4 text-primary" />
-                            Total no catalogo
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-0 text-3xl font-bold text-slate-900">
-                        {totalCatalogProducts}
-                    </CardContent>
-                </Card>
+    // KPI: total de produtos do lojista (sem filtro de busca)
+    prisma.product.count({ where: baseWhere }),
 
-                <Card className="border-none shadow-sm">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="flex items-center gap-2 text-sm text-slate-500">
-                            <Sparkles className="h-4 w-4 text-primary" />
-                            Produtos delivery
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-0 text-3xl font-bold text-slate-900">
-                        {deliveryProductsCount}
-                    </CardContent>
-                </Card>
+    // KPI: produtos com estoque controlado zerado (ruptura)
+    prisma.product.count({
+      where: {
+        ...baseWhere,
+        stockQuantity: { not: null, equals: 0 },
+      },
+    }),
 
-                <Card className="border-none shadow-sm">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="flex items-center gap-2 text-sm text-slate-500">
-                            <Layers3 className="h-4 w-4 text-primary" />
-                            Categorias
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-0 text-3xl font-bold text-slate-900">
-                        {categories.length}
-                    </CardContent>
-                </Card>
+    // KPI: soma de unidades físicas e reservadas.
+    // aggregate ignora rows com NULL — só conta produtos
+    // que têm estoque controlado (stockQuantity not null).
+    prisma.product.aggregate({
+      where: {
+        ...baseWhere,
+        stockQuantity: { not: null },
+      },
+      _sum: {
+        stockQuantity: true,
+        reservedStockQuantity: true,
+      },
+    }),
 
-                <Card className="border-none shadow-sm">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="flex items-center gap-2 text-sm text-slate-500">
-                            <Warehouse className="h-4 w-4 text-primary" />
-                            Estoque baixo
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-0 text-3xl font-bold text-slate-900">
-                        {lowStockCount}
-                    </CardContent>
-                </Card>
-            </div>
+    // Dropdown de categorias para o formulário
+    prisma.product.findMany({
+      where: { ...baseWhere, category: { not: null } },
+      select: { category: true },
+      distinct: ["category"],
+      orderBy: { category: "asc" },
+    }),
 
-            <Card className="border-none shadow-sm">
-                <CardContent className="flex flex-col gap-3 py-5 md:flex-row md:items-center md:justify-between">
-                    <div className="space-y-1">
-                        <p className="text-sm font-medium text-slate-900">
-                            Estrutura pronta para delivery e assinatura
-                        </p>
-                        <p className="text-sm text-slate-500">
-                            Produtos avulsos entram no delivery do WhatsApp.
-                            Assinaturas ficam separadas para nao poluir o contexto da
-                            mercearia.
-                        </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                        <Badge variant="default">
-                            {deliveryProductsCount} no delivery
-                        </Badge>
-                        <Badge variant="outline">
-                            {subscriptionProductsCount} assinaturas
-                        </Badge>
-                        <Badge variant="secondary">
-                            {PAGE_SIZE} por pagina
-                        </Badge>
-                    </div>
-                </CardContent>
-            </Card>
+    // Dropdown de tags para o formulário
+    prisma.tag.findMany({
+      where: { subscriberId: userId },
+      select: {
+        id: true,
+        name: true,
+        _count: { select: { productTags: true } },
+      },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
-            <Card className="border-none shadow-sm">
-                <CardContent className="flex flex-col gap-4 py-5 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="w-full max-w-xl">
-                        <ProductsToolbar initialQuery={searchQuery} />
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="outline">
-                            {filteredTotalProducts} resultado(s)
-                        </Badge>
-                        {searchQuery ? (
-                            <Badge variant="secondary">
-                                Busca: {searchQuery}
-                            </Badge>
-                        ) : null}
-                    </div>
-                </CardContent>
-            </Card>
+  // ─── Derivações em memória (custo zero) ──────────────────────────────────
+  const totalPhysicalStock = stockAggregations._sum.stockQuantity ?? 0;
+  const totalReservedStock = stockAggregations._sum.reservedStockQuantity ?? 0;
+  const totalPages = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE));
 
-            <ProductsDataTable
-                products={productRows}
-                categories={categories}
-                availableTags={availableTags}
-                currentPage={Math.min(currentPage, totalPages)}
-                totalPages={totalPages}
-                totalProducts={filteredTotalProducts}
-                pageSize={PAGE_SIZE}
-                searchQuery={searchQuery}
-                sortField={sortField}
-                sortDirection={sortDirection}
-            />
-        </div>
+  if (filteredTotal > 0 && currentPage > totalPages) {
+    redirect(
+      buildProductsPageHref({
+        page: totalPages,
+        query: searchQuery,
+        sortField,
+        sortDirection,
+        tab: activeTab,
+      }),
     );
+  }
+
+  const categories = categoryRows
+    .map((r) => r.category?.trim() || "")
+    .filter(Boolean);
+
+  const availableTags = tagRows.map((tag) => ({
+    id: tag.id,
+    name: tag.name,
+    productCount: tag._count.productTags,
+  }));
+  const syncStatusByProductId = await loadProductSyncStatuses(
+    products.map((product) => product.id),
+    userId,
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* ─── Header ──────────────────────────────────────────────────── */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <h2 className="flex items-center gap-2.5 text-2xl font-bold tracking-tight text-slate-900">
+            <ShoppingBag className="h-6 w-6 text-blue-600" />
+            Catálogo da loja
+          </h2>
+          <p className="text-sm text-slate-500">
+            Gerencie produtos, preços, estoque e categorias.
+          </p>
+        </div>
+        <ProductFormDialog
+          categories={categories}
+          availableTags={availableTags}
+        />
+      </div>
+
+      {/* ─── KPIs de WMS ─────────────────────────────────────────────── */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard
+          icon={<Package2 className="h-4 w-4 text-muted-foreground" />}
+          label="Total Cadastrado"
+          value={totalCatalog}
+          description="SKUs no catálogo"
+        />
+        <KpiCard
+          icon={<Warehouse className="h-4 w-4 text-muted-foreground" />}
+          label="Total em Estoque"
+          value={totalPhysicalStock}
+          description="Unidades com estoque controlado"
+        />
+        <KpiCard
+          icon={<Boxes className="h-4 w-4 text-muted-foreground" />}
+          label="Total Reservado"
+          value={totalReservedStock}
+          description="Unidades aguardando despacho"
+          highlight={totalReservedStock > 0}
+        />
+        <KpiCard
+          icon={<AlertTriangle className="h-4 w-4 text-muted-foreground" />}
+          label="Ruptura de Estoque"
+          value={outOfStockCount}
+          description="Produtos zerados"
+          destructive={outOfStockCount > 0}
+        />
+      </div>
+
+      {/* ─── Tabela com abas e busca integradas ──────────────────────── */}
+      {/*
+                ProductsToolbar foi removido daqui.
+                Ele agora é renderizado DENTRO do ProductsDataTable,
+                embutido na mesma linha das abas.
+            */}
+      <ProductsDataTable
+        products={products}
+        categories={categories}
+        availableTags={availableTags}
+        currentPage={Math.min(currentPage, totalPages)}
+        totalPages={totalPages}
+        totalProducts={filteredTotal}
+        totalActive={totalActive}
+        totalInactive={totalInactive}
+        pageSize={PAGE_SIZE}
+        searchQuery={searchQuery}
+        sortField={sortField}
+        sortDirection={sortDirection}
+        activeTab={activeTab}
+        syncStatusByProductId={syncStatusByProductId}
+      />
+    </div>
+  );
+}
+
+// ─── Componente de card de KPI ────────────────────────────────────────────────
+
+type KpiCardProps = {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  description: string;
+  highlight?: boolean;
+  destructive?: boolean;
+};
+
+function KpiCard({
+  icon,
+  label,
+  value,
+  description,
+  highlight,
+  destructive,
+}: KpiCardProps) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-slate-600">
+          {label}
+        </CardTitle>
+        {icon}
+      </CardHeader>
+      <CardContent>
+        <div
+          className={`text-2xl font-bold tabular-nums ${
+            destructive
+              ? "text-destructive"
+              : highlight
+                ? "text-blue-700"
+                : "text-slate-900"
+          }`}
+        >
+          {value.toLocaleString("pt-BR")}
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+      </CardContent>
+    </Card>
+  );
 }

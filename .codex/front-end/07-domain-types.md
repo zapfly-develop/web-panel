@@ -34,14 +34,21 @@ export type PaymentMethod =
 
 export type DeliveryType = "DELIVERY" | "PICKUP";
 
-export type OrderStatus = "PENDING" | "PREPARING" | "SHIPPED" | "DELIVERED";
+export type OrderStatus =
+  | "PENDING"
+  | "PREPARING"
+  | "READY_FOR_SHIPPING"
+  | "READY_FOR_DELIVERY"
+  | "SHIPPED"
+  | "DELIVERED";
 
 export type OrderSource =
   | "FLOOVI_WHATSAPP"
   | "TRAY"
   | "NUVEMSHOP"
   | "UAPPI"
-  | "OLIST";
+  | "OLIST"
+  | "MERCADOLIVRE";
 
 export type RiderStatus =
   | "PENDING_REVIEW"
@@ -72,6 +79,12 @@ export type DeliveryStatus =
 
 export type DeliveryPaymentHandledBy = "RIDER" | "STORE_MACHINE";
 export type DeliveryAssignmentType = "MARKETPLACE" | "STORE_OWNED" | "MANUAL";
+export type DeliveryRunStatus =
+  | "PENDING_ASSIGNMENT"
+  | "ASSIGNED"
+  | "IN_TRANSIT"
+  | "COMPLETED"
+  | "CANCELLED";
 
 export type WalletTransactionType = "CREDIT" | "DEBIT";
 export type WalletTransactionCategory =
@@ -168,6 +181,7 @@ export type RiderLocationSnapshot = {
   riderId: string;
   latitude: number;
   longitude: number;
+  h3Index?: string | null;
   accuracyMeters: number | null;
   recordedAt: IsoDateString | null;
   status: RiderPresenceStatus;
@@ -217,6 +231,7 @@ export type StoreDelivery = {
   destinationAddress: string;
   destinationLatitude: number | null;
   destinationLongitude: number | null;
+  h3Index?: string | null;
   acceptedAt: IsoDateString | null;
   pickedUpAt: IsoDateString | null;
   absentClientAt: IsoDateString | null;
@@ -283,6 +298,35 @@ export type WalletStatement = {
 };
 ```
 
+## Rider Analytics
+
+```ts
+
+export type RiderAnalyticsHotzone = {
+  rank: number;
+  h3Index: string;
+  center: { lat: number; lng: number };
+  boundary: Array<{ lat: number; lng: number }>;
+  deliveryCount: number;
+  totalAmountCents: number;
+  totalRiderProfitCents: number;
+  totalDeliveryFeeCents: number;
+  totalRiderRetainedCents: number;
+  averageProfitCents: number;
+  averageTravelSeconds: number | null;
+  averageResponseSeconds: number | null;
+  profitPerTravelMinuteCents: number | null;
+  efficiencyScore: number;
+  lastDeliveredAt: IsoDateString | null;
+};
+
+export type RiderAnalyticsSpatial = {
+  h3Resolution: number;
+  hotzoneLimit: number;
+  hotzones: RiderAnalyticsHotzone[];
+};
+```
+
 ## Labels Recomendados
 
 ```ts
@@ -303,4 +347,3 @@ export const deliveryStatusLabels: Record<DeliveryStatus, string> = {
   CANCELED: "Cancelada",
 };
 ```
-

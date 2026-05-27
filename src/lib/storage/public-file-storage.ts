@@ -55,6 +55,12 @@ function extractFileExtension(
 
 function buildLocalPublicUrl(relativePath: string): string {
     const normalizedPath = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+    const appBaseUrl = process.env.APP_BASE_URL?.trim();
+
+    if (appBaseUrl) {
+        return joinUrl(appBaseUrl, normalizedPath);
+    }
+
     return `/${normalizedPath}`;
 }
 

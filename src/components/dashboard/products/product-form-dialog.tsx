@@ -2,11 +2,21 @@
 
 import { ReactNode, useActionState, useEffect, useState } from "react";
 import { ProductType } from "@prisma/client";
-import { Loader2, PackagePlus, Pencil } from "lucide-react";
+import {
+    AlertTriangle,
+    Barcode,
+    Boxes,
+    Loader2,
+    PackagePlus,
+    Pencil,
+    RefreshCw,
+    Tags,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
+    DialogClose,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -16,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
     Select,
     SelectContent,
@@ -23,6 +34,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
     createUserProductAction,
@@ -62,6 +74,7 @@ type ProductDialogProps = ProductDialogBaseProps & {
     productId?: string;
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
+    onSuccess?: (state: ProductFormState) => void;
 };
 
 type ProductEditDialogProps = ProductDialogBaseProps & {
@@ -71,9 +84,11 @@ type ProductEditDialogProps = ProductDialogBaseProps & {
         description: string | null;
         imageUrl: string | null;
         category: string | null;
+        sku: string | null;
         priceCents: number;
         promotionalPriceCents: number | null;
         stockQuantity: number | null;
+        reservedStockQuantity: number;
         productType: ProductType;
         subscriberDays: number | null;
         productTags: Array<{
@@ -82,6 +97,7 @@ type ProductEditDialogProps = ProductDialogBaseProps & {
             };
         }>;
     };
+    showTrigger?: boolean;
 };
 
 function centsToInputValue(valueCents: number | null): string {
@@ -104,7 +120,7 @@ function ProductForm({
     productId,
 }: ProductDialogBaseProps & {
     mode: ProductDialogMode;
-    onSuccess: () => void;
+    onSuccess: (state: ProductFormState) => void;
     action: ProductFormAction;
     initialValues: ProductFormValues;
     submitLabel: string;
@@ -116,10 +132,19 @@ function ProductForm({
     );
     const [category, setCategory] = useState(initialValues.category);
     const [tags, setTags] = useState<string[]>(initialValues.tags);
+    const [syncToChannels, setSyncToChannels] = useState(
+        initialValues.syncToChannels,
+    );
     const [state, submitAction, isPending] = useActionState(
         action,
-        initialProductFormState,
+        {
+            ...initialProductFormState,
+            values: initialValues,
+        },
     );
+    const formValues = state.status === "error" ? state.values : initialValues;
+    const reservedStockQuantity = Number(formValues.reservedStockQuantity) || 0;
+    const hasReservedStock = mode === "edit" && reservedStockQuantity > 0;
 
     useEffect(() => {
         if (state.status !== "success") {
@@ -127,12 +152,17 @@ function ProductForm({
         }
 
         toast.success(successMessage);
-        onSuccess();
-    }, [onSuccess, state.status, successMessage]);
+        onSuccess(state);
+    }, [onSuccess, state, state.status, successMessage]);
 
     return (
-        <form action={submitAction} className="grid gap-5">
+        <form action={submitAction} className="grid gap-6">
             {productId ? <input type="hidden" name="productId" value={productId} /> : null}
+            <input
+                type="hidden"
+                name="syncToChannels"
+                value={syncToChannels ? "true" : "false"}
+            />
 
             {state.formError && state.status === "error" && (
                 <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -140,14 +170,19 @@ function ProductForm({
                 </div>
             )}
 
-            <div className="grid gap-5 md:grid-cols-2">
-                <div className="grid gap-2 md:col-span-2">
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.85fr)]">
+            <section className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                    Informacoes gerais
+                </p>
+
+                <div className="grid gap-2">
                     <Label htmlFor={`${mode}-title`}>Nome do produto</Label>
                     <Input
                         id={`${mode}-title`}
                         name="title"
                         placeholder="Ex.: Coca-Cola 2L"
-                        defaultValue={initialValues.title}
+                        defaultValue={formValues.title}
                         required
                     />
                     {state.fieldErrors.title && (
@@ -157,14 +192,14 @@ function ProductForm({
                     )}
                 </div>
 
-                <div className="grid gap-2 md:col-span-2">
+                <div className="grid gap-2">
                     <Label htmlFor={`${mode}-description`}>Descricao</Label>
                     <Textarea
                         id={`${mode}-description`}
                         name="description"
                         rows={3}
                         placeholder="Detalhes que ajudam o cliente e a IA a vender melhor."
-                        defaultValue={initialValues.description}
+                        defaultValue={formValues.description}
                     />
                     {state.fieldErrors.description && (
                         <p className="text-sm text-destructive">
@@ -173,41 +208,12 @@ function ProductForm({
                     )}
                 </div>
 
-                <ProductImageDropzone
-                    name="imageUrl"
-                    initialValue={initialValues.imageUrl}
-                    error={state.fieldErrors.imageUrl}
-                />
+            </section>
 
-                <div className="grid gap-2">
-                    <Label>Categoria</Label>
-                    <ProductCategoryCombobox
-                        categories={categories}
-                        value={category}
-                        onChange={setCategory}
-                    />
-                    <input type="hidden" name="category" value={category} />
-                    {state.fieldErrors.category && (
-                        <p className="text-sm text-destructive">
-                            {state.fieldErrors.category}
-                        </p>
-                    )}
-                </div>
-
-                <div className="grid gap-2 md:col-span-2">
-                    <Label>Tags</Label>
-                    <ProductTagsInput
-                        availableTags={availableTags}
-                        value={tags}
-                        onChange={setTags}
-                    />
-                    <input type="hidden" name="tags" value={JSON.stringify(tags)} />
-                    {state.fieldErrors.tags && (
-                        <p className="text-sm text-destructive">
-                            {state.fieldErrors.tags}
-                        </p>
-                    )}
-                </div>
+            <section className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                    Comercial
+                </p>
 
                 <div className="grid gap-2">
                     <Label>Tipo</Label>
@@ -246,7 +252,7 @@ function ProductForm({
                         min="0.01"
                         step="0.01"
                         placeholder="0,00"
-                        defaultValue={initialValues.price}
+                        defaultValue={formValues.price}
                         required
                     />
                     {state.fieldErrors.price && (
@@ -267,7 +273,7 @@ function ProductForm({
                         min="0.01"
                         step="0.01"
                         placeholder="Opcional"
-                        defaultValue={initialValues.promotionalPrice}
+                        defaultValue={formValues.promotionalPrice}
                     />
                     <p className="text-xs text-muted-foreground">
                         Se informado, sera o preco usado no delivery e nas
@@ -280,26 +286,8 @@ function ProductForm({
                     )}
                 </div>
 
-                <div className="grid gap-2">
-                    <Label htmlFor={`${mode}-stockQuantity`}>Estoque</Label>
-                    <Input
-                        id={`${mode}-stockQuantity`}
-                        name="stockQuantity"
-                        type="number"
-                        min="0"
-                        step="1"
-                        placeholder="Deixe vazio para estoque livre"
-                        defaultValue={initialValues.stockQuantity}
-                    />
-                    {state.fieldErrors.stockQuantity && (
-                        <p className="text-sm text-destructive">
-                            {state.fieldErrors.stockQuantity}
-                        </p>
-                    )}
-                </div>
-
                 {productType === ProductType.SUBSCRIPTION && (
-                    <div className="grid gap-2 md:col-span-2">
+                    <div className="grid gap-2">
                         <Label htmlFor={`${mode}-subscriberDays`}>
                             Duracao da assinatura
                         </Label>
@@ -310,7 +298,7 @@ function ProductForm({
                             min="1"
                             step="1"
                             placeholder="Quantidade de dias"
-                            defaultValue={initialValues.subscriberDays}
+                            defaultValue={formValues.subscriberDays}
                         />
                         {state.fieldErrors.subscriberDays && (
                             <p className="text-sm text-destructive">
@@ -319,10 +307,190 @@ function ProductForm({
                         )}
                     </div>
                 )}
+            </section>
+
+            <section className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                    Midia do produto
+                </p>
+
+                <ProductImageDropzone
+                    name="imageUrl"
+                    initialValue={formValues.imageUrl}
+                    error={state.fieldErrors.imageUrl}
+                />
+            </section>
+
+            <section className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                    Categoria e tags
+                </p>
+
+                <div className="grid gap-2">
+                    <Label>Categoria</Label>
+                    <ProductCategoryCombobox
+                        categories={categories}
+                        value={category}
+                        onChange={setCategory}
+                    />
+                    <input type="hidden" name="category" value={category} />
+                    {state.fieldErrors.category && (
+                        <p className="text-sm text-destructive">
+                            {state.fieldErrors.category}
+                        </p>
+                    )}
+                </div>
+
+                <div className="grid gap-2">
+                    <Label className="flex items-center gap-2 text-blue-700">
+                        <Tags className="h-4 w-4" />
+                        Tags
+                    </Label>
+                    <ProductTagsInput
+                        availableTags={availableTags}
+                        value={tags}
+                        onChange={setTags}
+                    />
+                    <input type="hidden" name="tags" value={JSON.stringify(tags)} />
+                    {state.fieldErrors.tags && (
+                        <p className="text-sm text-destructive">
+                            {state.fieldErrors.tags}
+                        </p>
+                    )}
+                </div>
+            </section>
+
+            <section className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                    Estoque e WMS
+                </p>
+
+                <div className="grid gap-2">
+                    <Label
+                        htmlFor={`${mode}-sku`}
+                        className="flex items-center gap-2 text-blue-700"
+                    >
+                        <Barcode className="h-4 w-4" />
+                        SKU
+                    </Label>
+                    <Input
+                        id={`${mode}-sku`}
+                        name="sku"
+                        placeholder="Ex.: BEB-COCA-2L"
+                        defaultValue={formValues.sku}
+                        required
+                    />
+                    {state.fieldErrors.sku && (
+                        <p className="text-sm text-destructive">
+                            {state.fieldErrors.sku}
+                        </p>
+                    )}
+                </div>
+
+                <div className="grid gap-2">
+                    <Label
+                        htmlFor={`${mode}-stockQuantity`}
+                        className="flex items-center gap-2 text-blue-700"
+                    >
+                        <Boxes className="h-4 w-4" />
+                        Estoque
+                    </Label>
+                    <Input
+                        id={`${mode}-stockQuantity`}
+                        name="stockQuantity"
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="Deixe vazio para estoque livre"
+                        defaultValue={formValues.stockQuantity}
+                    />
+                    {state.fieldErrors.stockQuantity && (
+                        <p className="text-sm text-destructive">
+                            {state.fieldErrors.stockQuantity}
+                        </p>
+                    )}
+                </div>
+
+                {mode === "edit" && (
+                    <div
+                        className={`grid gap-2 rounded-lg border px-3 py-3 ${
+                            hasReservedStock
+                                ? "border-blue-200 bg-blue-50/70"
+                                : "border-slate-200 bg-slate-50/70"
+                        }`}
+                    >
+                        <div className="flex items-center justify-between gap-3">
+                            <Label htmlFor={`${mode}-reservedStockQuantity`}>
+                                Estoque reservado
+                            </Label>
+                            {hasReservedStock ? (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800">
+                                    <AlertTriangle className="h-3.5 w-3.5" />
+                                    Reservado
+                                </span>
+                            ) : null}
+                        </div>
+                        <Input
+                            id={`${mode}-reservedStockQuantity`}
+                            name="reservedStockQuantity"
+                            value={formValues.reservedStockQuantity}
+                            readOnly
+                            aria-readonly="true"
+                            className="bg-white/70 font-medium text-slate-700"
+                        />
+                        {hasReservedStock ? (
+                            <p className="text-xs text-blue-800">
+                                Esta quantidade esta bloqueada em carrinhos ou
+                                ordens de separacao e nao pode ser editada aqui.
+                            </p>
+                        ) : (
+                            <p className="text-xs text-muted-foreground">
+                                Nenhuma unidade reservada para separacao no momento.
+                            </p>
+                        )}
+                    </div>
+                )}
+
+                <div className="flex items-start justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3">
+                    <div className="grid gap-1">
+                        <Label
+                            htmlFor={`${mode}-syncToChannels`}
+                            className="flex items-center gap-2 text-blue-700"
+                        >
+                            <RefreshCw className="h-4 w-4" />
+                            Salvar e sincronizar canais
+                        </Label>
+                        <p className="max-w-xl text-xs text-muted-foreground">
+                            Enfileira apenas os canais elegiveis para publicacao.
+                        </p>
+                        {state.fieldErrors.syncToChannels && (
+                            <p className="text-sm text-destructive">
+                                {state.fieldErrors.syncToChannels}
+                            </p>
+                        )}
+                    </div>
+                    <Switch
+                        id={`${mode}-syncToChannels`}
+                        checked={syncToChannels}
+                        onCheckedChange={setSyncToChannels}
+                        disabled={isPending}
+                        className="data-[state=checked]:bg-blue-600"
+                    />
+                </div>
+            </section>
             </div>
 
-            <DialogFooter className="gap-2 sm:justify-end">
-                <Button type="submit" disabled={isPending}>
+            <DialogFooter className="gap-2 sm:justify-between">
+                <DialogClose asChild>
+                    <Button type="button" variant="outline" disabled={isPending}>
+                        Cancelar
+                    </Button>
+                </DialogClose>
+                <Button
+                    type="submit"
+                    disabled={isPending}
+                    className="bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+                >
                     {isPending ? (
                         <>
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -349,6 +517,7 @@ function ProductDialog({
     productId,
     open,
     onOpenChange,
+    onSuccess,
     categories,
     availableTags,
 }: ProductDialogProps) {
@@ -367,24 +536,46 @@ function ProductDialog({
     return (
         <Dialog open={isOpen} onOpenChange={handleOpenChange}>
             {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
-            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-                <DialogHeader>
-                    <DialogTitle>{title}</DialogTitle>
-                    <DialogDescription>{description}</DialogDescription>
+            <DialogContent className="flex h-[92vh] max-h-[92vh] flex-col overflow-hidden border-slate-200 bg-slate-50 p-0 shadow-2xl sm:max-w-5xl">
+                <DialogHeader className="shrink-0 px-6 pt-6">
+                    <div className="flex items-start gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
+                            <PackagePlus className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0 space-y-1.5">
+                            <DialogTitle className="text-xl text-slate-950">
+                                {title}
+                            </DialogTitle>
+                            <DialogDescription className="max-w-2xl text-slate-600">
+                                {description}
+                            </DialogDescription>
+                        </div>
+                    </div>
                 </DialogHeader>
 
                 {isOpen ? (
-                    <ProductForm
-                        mode={mode}
-                        categories={categories}
-                        availableTags={availableTags}
-                        onSuccess={() => handleOpenChange(false)}
-                        action={action}
-                        initialValues={initialValues}
-                        submitLabel={submitLabel}
-                        successMessage={successMessage}
-                        productId={productId}
-                    />
+                    <ScrollArea
+                        className="min-h-0 flex-1"
+                        scrollBarClassName="w-3 p-1"
+                        scrollThumbClassName="bg-blue-500 hover:bg-blue-600"
+                    >
+                        <div className="px-6 pb-6 pt-4">
+                            <ProductForm
+                                mode={mode}
+                                categories={categories}
+                                availableTags={availableTags}
+                                onSuccess={(state) => {
+                                    onSuccess?.(state);
+                                    handleOpenChange(false);
+                                }}
+                                action={action}
+                                initialValues={initialValues}
+                                submitLabel={submitLabel}
+                                successMessage={successMessage}
+                                productId={productId}
+                            />
+                        </div>
+                    </ScrollArea>
                 ) : null}
             </DialogContent>
         </Dialog>
@@ -394,11 +585,17 @@ function ProductDialog({
 export function ProductFormDialog({
     categories,
     availableTags,
+    initialValues = initialProductFormValues,
+    showTrigger = true,
     open,
     onOpenChange,
+    onSuccess,
 }: ProductDialogBaseProps & {
+    initialValues?: ProductFormValues;
+    showTrigger?: boolean;
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
+    onSuccess?: (state: ProductFormState) => void;
 }) {
     return (
         <ProductDialog
@@ -406,19 +603,22 @@ export function ProductFormDialog({
             categories={categories}
             availableTags={availableTags}
             trigger={
-                <Button className="gap-2">
-                    <PackagePlus className="h-4 w-4" />
-                    Novo produto
-                </Button>
+                showTrigger ? (
+                    <Button className="gap-2">
+                        <PackagePlus className="h-4 w-4" />
+                        Novo produto
+                    </Button>
+                ) : undefined
             }
             title="Novo produto"
             description="Cadastre itens da loja com categoria, tags e preco promocional para o delivery no WhatsApp."
             submitLabel="Salvar produto"
             successMessage="Produto cadastrado com sucesso."
             action={createUserProductAction}
-            initialValues={initialProductFormValues}
+            initialValues={initialValues}
             open={open}
             onOpenChange={onOpenChange}
+            onSuccess={onSuccess}
         />
     );
 }
@@ -427,6 +627,7 @@ export function ProductEditDialog({
     categories,
     availableTags,
     product,
+    showTrigger = true,
     open,
     onOpenChange,
 }: ProductEditDialogProps & {
@@ -439,17 +640,20 @@ export function ProductEditDialog({
         imageUrl: product.imageUrl ?? "",
         category: product.category ?? "",
         tags: product.productTags.map((entry) => entry.tag.name),
+        sku: product.sku ?? "",
         price: centsToInputValue(product.priceCents),
         promotionalPrice: centsToInputValue(product.promotionalPriceCents),
         stockQuantity:
             typeof product.stockQuantity === "number"
                 ? String(product.stockQuantity)
                 : "",
+        reservedStockQuantity: String(product.reservedStockQuantity),
         productType: product.productType,
         subscriberDays:
             typeof product.subscriberDays === "number"
                 ? String(product.subscriberDays)
                 : "",
+        syncToChannels: false,
     };
 
     return (
@@ -458,10 +662,11 @@ export function ProductEditDialog({
             categories={categories}
             availableTags={availableTags}
             trigger={
-                <Button size="sm" variant="outline">
-                    <Pencil className="h-4 w-4" />
-                    Editar
-                </Button>
+                showTrigger ? (
+                    <Button size="icon" variant="outline" aria-label="Editar produto">
+                        <Pencil className="h-4 w-4" />
+                    </Button>
+                ) : undefined
             }
             title={`Editar ${product.title}`}
             description="Atualize dados do produto, tags e preco promocional sem sair da listagem."

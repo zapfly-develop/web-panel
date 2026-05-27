@@ -3,6 +3,11 @@
 import { ProductType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import {
+    buildAuthenticatedNestHeaders,
+    fetchNestApiJson,
+    NestApiError,
+} from "@/lib/nest-api";
 import { prisma } from "@/lib/prisma";
 import { requireSessionUser } from "@/lib/server-session";
 import {
@@ -26,20 +31,29 @@ const productFormSchema = z.object({
     description: z.string().trim().optional(),
     imageUrl: optionalUrlSchema,
     category: z.string().trim().optional(),
+    sku: z.string().trim().min(1, "Informe o SKU do produto."),
     price: z.coerce.number().positive("Informe um preco maior que zero."),
     promotionalPrice: z.coerce.number().positive().optional(),
     stockQuantity: z.string().trim().optional(),
     productType: z.nativeEnum(ProductType),
     subscriberDays: z.string().trim().optional(),
+    tags: z.array(z.string().trim().max(60)).max(20).default([]),
+    syncToChannels: z.boolean().default(false),
 });
 
 type PreparedProductPayload = {
     parsed: z.infer<typeof productFormSchema>;
     values: ProductFormValues;
-    tags: Awaited<ReturnType<typeof ensureUserTags>>;
     stockQuantity: number | null;
     subscriberDays: number | null;
     promotionalPriceCents: number | null;
+};
+
+type ProductMutationResponse = {
+    id: string;
+    title: string;
+    sku: string | null;
+    stockQuantity: number | null;
 };
 
 function normalizeTagName(value: string) {
@@ -113,13 +127,19 @@ function buildRawValues(formData: FormData): ProductFormValues {
         imageUrl: String(formData.get("imageUrl") ?? "").trim(),
         category: String(formData.get("category") ?? "").trim(),
         tags: parseTagNames(formData.get("tags")),
+        sku: String(formData.get("sku") ?? "").trim(),
         price: String(formData.get("price") ?? "").trim(),
         promotionalPrice: String(formData.get("promotionalPrice") ?? "").trim(),
         stockQuantity: String(formData.get("stockQuantity") ?? "").trim(),
+        reservedStockQuantity: String(
+            formData.get("reservedStockQuantity") ?? "0",
+        ).trim(),
         productType: normalizeProductType(
             String(formData.get("productType") ?? ProductType.ONE_TIME),
         ),
         subscriberDays: String(formData.get("subscriberDays") ?? "").trim(),
+        syncToChannels:
+            String(formData.get("syncToChannels") ?? "false") === "true",
     };
 }
 
@@ -141,6 +161,7 @@ function buildErrorState(
         values: {
             ...values,
             productType: normalizeProductType(String(values.productType)),
+            syncToChannels: values.syncToChannels ?? false,
         },
     };
 }
@@ -195,7 +216,6 @@ async function ensureUserTags(userId: string, tagNames: string[]) {
 }
 
 async function prepareProductPayload(
-    userId: string,
     rawValues: ProductFormValues,
 ): Promise<
     | { ok: true; payload: PreparedProductPayload }
@@ -206,6 +226,8 @@ async function prepareProductPayload(
         price: parseMoneyValue(rawValues.price) ?? 0,
         promotionalPrice: parseMoneyValue(rawValues.promotionalPrice),
         productType: rawValues.productType,
+        tags: rawValues.tags,
+        syncToChannels: rawValues.syncToChannels,
     });
 
     if (!parsed.success) {
@@ -222,11 +244,13 @@ async function prepareProductPayload(
                     imageUrl: fieldErrors.imageUrl?.[0],
                     category: fieldErrors.category?.[0],
                     tags: undefined,
+                    sku: fieldErrors.sku?.[0],
                     price: fieldErrors.price?.[0],
                     promotionalPrice: fieldErrors.promotionalPrice?.[0],
                     stockQuantity: fieldErrors.stockQuantity?.[0],
                     productType: fieldErrors.productType?.[0],
                     subscriberDays: fieldErrors.subscriberDays?.[0],
+                    syncToChannels: fieldErrors.syncToChannels?.[0],
                 },
                 values: {
                     ...rawValues,
@@ -301,46 +325,25 @@ async function prepareProductPayload(
         };
     }
 
-    try {
-        const tags = await ensureUserTags(userId, rawValues.tags);
-
-        return {
-            ok: true,
-            payload: {
-                parsed: parsed.data,
-                values: rawValues,
-                tags,
-                stockQuantity,
-                subscriberDays,
-                promotionalPriceCents,
-            },
-        };
-    } catch (error) {
-        return {
-            ok: false,
-            state: buildErrorState(
-                rawValues,
-                {
-                    tags: "Revise as tags informadas.",
-                },
-                error instanceof Error
-                    ? error.message
-                    : "Nao foi possivel salvar as tags do produto.",
-            ),
-        };
-    }
+    return {
+        ok: true,
+        payload: {
+            parsed: parsed.data,
+            values: rawValues,
+            stockQuantity,
+            subscriberDays,
+            promotionalPriceCents,
+        },
+    };
 }
 
-function buildProductData(
-    userId: string,
-    payload: PreparedProductPayload,
-) {
+function buildProductData(payload: PreparedProductPayload) {
     return {
-        ownerUserId: userId,
         title: payload.parsed.title,
         description: payload.parsed.description || null,
-        imageUrl: payload.parsed.imageUrl || null,
+        imageUrl: normalizeImageUrlForNest(payload.parsed.imageUrl),
         category: payload.parsed.category || null,
+        sku: payload.parsed.sku,
         stockQuantity: payload.stockQuantity,
         priceCents: Math.round(payload.parsed.price * 100),
         promotionalPriceCents: payload.promotionalPriceCents,
@@ -349,7 +352,52 @@ function buildProductData(
             payload.parsed.productType === ProductType.SUBSCRIPTION
                 ? payload.subscriberDays
                 : null,
+        tags: payload.parsed.tags,
+        syncToChannels: payload.parsed.syncToChannels,
     };
+}
+
+function normalizeImageUrlForNest(imageUrl: string | null | undefined) {
+    const value = imageUrl?.trim();
+
+    if (!value) {
+        return null;
+    }
+
+    if (/^https?:\/\//i.test(value)) {
+        return value;
+    }
+
+    const appBaseUrl = process.env.APP_BASE_URL?.trim();
+
+    if (!appBaseUrl || !value.startsWith("/")) {
+        return value;
+    }
+
+    return new URL(value, appBaseUrl.endsWith("/") ? appBaseUrl : `${appBaseUrl}/`)
+        .toString();
+}
+
+function extractNestActionMessage(error: unknown, fallback: string): string {
+    if (error instanceof NestApiError) {
+        const payload = error.payload;
+
+        if (payload && typeof payload === "object" && "message" in payload) {
+            const message = payload.message;
+
+            if (Array.isArray(message)) {
+                return message.filter(Boolean).join(" ");
+            }
+
+            if (typeof message === "string" && message.trim()) {
+                return message;
+            }
+        }
+
+        return error.message || fallback;
+    }
+
+    return error instanceof Error ? error.message : fallback;
 }
 
 export async function createUserProductAction(
@@ -358,7 +406,7 @@ export async function createUserProductAction(
 ): Promise<ProductFormState> {
     const user = await requireSessionUser();
     const rawValues = buildRawValues(formData);
-    const prepared = await prepareProductPayload(user.id, rawValues);
+    const prepared = await prepareProductPayload(rawValues);
 
     if (!prepared.ok) {
         return prepared.state;
@@ -366,27 +414,41 @@ export async function createUserProductAction(
 
     const { payload } = prepared;
 
-    await prisma.product.create({
-        data: {
-            ...buildProductData(user.id, payload),
-            productTags: payload.tags.length
-                ? {
-                      create: payload.tags.map((tag) => ({
-                          subscriberId: user.id,
-                          tagId: tag.id,
-                      })),
-                  }
-                : undefined,
-        },
-    });
+    let product: ProductMutationResponse;
+
+    try {
+        product = await fetchNestApiJson<ProductMutationResponse>("/wms/products", {
+            method: "POST",
+            headers: await buildAuthenticatedNestHeaders(user.id, {
+                "Content-Type": "application/json",
+            }),
+            body: JSON.stringify(buildProductData(payload)),
+        });
+    } catch (error) {
+        return buildErrorState(
+            rawValues,
+            {},
+            extractNestActionMessage(
+                error,
+                "Nao foi possivel salvar o produto.",
+            ),
+        );
+    }
 
     revalidatePath("/dashboard/products");
+    revalidatePath("/dashboard/inbound");
 
     return {
         status: "success",
         formError: null,
         fieldErrors: {},
         values: initialProductFormState.values,
+        savedProduct: {
+            id: product.id,
+            title: product.title,
+            sku: product.sku,
+            stockQuantity: product.stockQuantity,
+        },
     };
 }
 
@@ -424,7 +486,7 @@ export async function updateUserProductAction(
     }
 
     const rawValues = buildRawValues(formData);
-    const prepared = await prepareProductPayload(user.id, rawValues);
+    const prepared = await prepareProductPayload(rawValues);
 
     if (!prepared.ok) {
         return prepared.state;
@@ -432,30 +494,27 @@ export async function updateUserProductAction(
 
     const { payload } = prepared;
 
-    await prisma.$transaction([
-        prisma.product.update({
-            where: { id: productId },
-            data: buildProductData(user.id, payload),
-        }),
-        prisma.productTags.deleteMany({
-            where: {
-                subscriberId: user.id,
-                productId,
+    try {
+        await fetchNestApiJson<ProductMutationResponse>(
+            `/wms/products/${productId}`,
+            {
+                method: "PATCH",
+                headers: await buildAuthenticatedNestHeaders(user.id, {
+                    "Content-Type": "application/json",
+                }),
+                body: JSON.stringify(buildProductData(payload)),
             },
-        }),
-        ...(payload.tags.length
-            ? [
-                  prisma.productTags.createMany({
-                      data: payload.tags.map((tag) => ({
-                          subscriberId: user.id,
-                          productId,
-                          tagId: tag.id,
-                      })),
-                      skipDuplicates: true,
-                  }),
-              ]
-            : []),
-    ]);
+        );
+    } catch (error) {
+        return buildErrorState(
+            rawValues,
+            {},
+            extractNestActionMessage(
+                error,
+                "Nao foi possivel atualizar o produto.",
+            ),
+        );
+    }
 
     revalidatePath("/dashboard/products");
 
